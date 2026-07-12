@@ -1,0 +1,59 @@
+<div class="searchable-select" [class.searchable-select--open]="open" [class.searchable-select--wide]="wide" [class.searchable-select--disabled]="disabled">
+  <button
+    #trigger
+    type="button"
+    class="searchable-select__trigger"
+    [class.searchable-select__trigger--sm]="small"
+    [class.searchable-select__trigger--wide]="wide"
+    [class.searchable-select__trigger--pending]="hasPendingSelection"
+    [class.is-invalid]="invalid"
+    [disabled]="disabled"
+    [attr.data-txn-focus]="txnFocus || null"
+    [attr.aria-expanded]="open"
+    aria-haspopup="listbox"
+    (click)="toggle($event)"
+    (keydown)="onTriggerKeydown($event)"
+  >
+    <span class="searchable-select__label" [class.text-muted]="(value == null || value === '') && !hasPendingSelection">
+      {{ displayLabel }}
+    </span>
+    <span class="searchable-select__chevron" aria-hidden="true"></span>
+  </button>
+
+  <div
+    #panel
+    class="searchable-select__panel"
+    [class.searchable-select__panel--wide]="wide"
+    *ngIf="open"
+    [ngStyle]="panelStyle"
+    (keydown)="onPanelKeydown($event)"
+  >
+    <input
+      #searchInput
+      type="text"
+      class="form-control form-control-sm searchable-select__search"
+      placeholder="Search..."
+      [(ngModel)]="search"
+      (ngModelChange)="onSearchChange()"
+    />
+    <ul class="searchable-select__list" role="listbox">
+      <li
+        *ngFor="let item of visibleItems; let i = index"
+        class="searchable-select__option"
+        [class.searchable-select__option--active]="i === highlightedIndex"
+        [class.searchable-select__option--disabled]="item.disabled"
+        [class.searchable-select__option--selected]="isSelected(item)"
+        [class.searchable-select__option--create]="isCreateOption(item)"
+        role="option"
+        (mousedown)="selectItem(item, $event)"
+      >
+        <ng-container *ngIf="isCreateOption(item); else existingOption">
+          <span class="searchable-select__create-mark">+</span>
+          <span>Add "{{ item.label }}"</span>
+        </ng-container>
+        <ng-template #existingOption>{{ item.label }}</ng-template>
+      </li>
+      <li *ngIf="visibleItems.length === 0" class="searchable-select__empty">No matches</li>
+    </ul>
+  </div>
+</div>

@@ -1,0 +1,141 @@
+<div class="page-shell">
+  <div class="page-header">
+    <div>
+      <h4>Reports</h4>
+      <p class="hint-text mb-0">Net figures exclude sale/purchase returns in the selected period (same as dashboard &amp; profit tab)</p>
+    </div>
+  </div>
+
+  <div class="content-panel">
+    <ul class="nav nav-tabs mb-3">
+      <li class="nav-item"><button class="nav-link" [class.active]="activeTab === 'sales'" (click)="setTab('sales')">Sales</button></li>
+      <li class="nav-item"><button class="nav-link" [class.active]="activeTab === 'purchases'" (click)="setTab('purchases')">Purchases</button></li>
+      <li class="nav-item"><button class="nav-link" [class.active]="activeTab === 'stock'" (click)="setTab('stock')">Stock</button></li>
+      <li class="nav-item"><button class="nav-link" [class.active]="activeTab === 'profit'" (click)="setTab('profit')">Profit</button></li>
+      <li class="nav-item"><button class="nav-link" [class.active]="activeTab === 'expenses'" (click)="setTab('expenses')">Expenses</button></li>
+    </ul>
+
+    <div class="toolbar" *ngIf="activeTab !== 'stock'">
+      <div class="btn-group btn-group-sm">
+        <button type="button" class="btn btn-outline-secondary" (click)="applyDateRange('today')">Today</button>
+        <button type="button" class="btn btn-outline-secondary" (click)="applyDateRange('week')">This week</button>
+        <button type="button" class="btn btn-outline-secondary" (click)="applyDateRange('month')">This month</button>
+      </div>
+      <input type="date" class="form-control" [(ngModel)]="fromDate" />
+      <input type="date" class="form-control" [(ngModel)]="toDate" />
+      <button class="btn btn-primary" (click)="setTab(activeTab)" [disabled]="loading">Refresh</button>
+      <label class="report-toggle" *ngIf="activeTab === 'sales' || activeTab === 'purchases'">
+        <input type="checkbox" [(ngModel)]="hideFullyReturned" (change)="onHideFullyReturnedChange()" />
+        Hide fully returned invoices
+      </label>
+    </div>
+    <div class="toolbar" *ngIf="activeTab === 'stock'">
+      <input class="form-control" placeholder="Search product..." [(ngModel)]="search" (keyup.enter)="loadStock()" />
+      <button class="btn btn-primary" (click)="loadStock()" [disabled]="loading">Search</button>
+    </div>
+
+    <div *ngIf="loading" class="loading-row">Loading...</div>
+
+    <div *ngIf="!loading && activeTab === 'sales'">
+      <div class="row g-2 mb-3" *ngIf="salesSummary as s">
+        <div class="col-md-4"><div class="stat-card"><span>Gross sales</span><strong>{{ s.grossSales | number:'1.2-2' }}</strong></div></div>
+        <div class="col-md-4"><div class="stat-card"><span>Returns in period</span><strong class="text-danger">−{{ s.returnsInPeriod | number:'1.2-2' }}</strong></div></div>
+        <div class="col-md-4"><div class="stat-card"><span>Net sales</span><strong>{{ s.netSales | number:'1.2-2' }}</strong></div></div>
+        <div class="col-md-6"><div class="stat-card"><span>Net profit (after returns)</span><strong>{{ s.netProfit | number:'1.2-2' }}</strong></div></div>
+        <div class="col-md-6"><div class="stat-card stat-card--muted"><span>Gross profit before returns</span><strong>{{ s.grossProfit | number:'1.2-2' }}</strong></div></div>
+      </div>
+      <div class="data-table-wrap">
+        <table class="data-table">
+          <thead><tr><th>Invoice</th><th>Date</th><th>Customer</th><th>Gross</th><th>Returned</th><th>Net</th><th>Net profit</th><th>Status</th></tr></thead>
+          <tbody>
+            <tr *ngIf="salesRows.length === 0" class="empty-row"><td colspan="8">No active sales in range{{ hideFullyReturned ? ' (fully returned invoices are hidden)' : '' }}.</td></tr>
+            <tr *ngFor="let r of salesRows" [class.row-muted]="r.returnStatus === 'Partial'">
+              <td>{{ r.saleNumber }}</td>
+              <td>{{ r.saleDate | appDate }}</td>
+              <td>{{ r.customerName || '—' }}</td>
+              <td>{{ r.grandTotal | number:'1.2-2' }}</td>
+              <td class="text-danger">{{ r.returnedAmount > 0 ? ('−' + (r.returnedAmount | number:'1.2-2')) : '—' }}</td>
+              <td><strong>{{ r.netAmount | number:'1.2-2' }}</strong></td>
+              <td>{{ r.netProfitAmount | number:'1.2-2' }}</td>
+              <td><span class="badge-return" *ngIf="returnStatusLabel(r.returnStatus)">{{ returnStatusLabel(r.returnStatus) }}</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div *ngIf="!loading && activeTab === 'purchases'">
+      <div class="row g-2 mb-3" *ngIf="purchaseSummary as s">
+        <div class="col-md-4"><div class="stat-card"><span>Gross purchases</span><strong>{{ s.grossPurchases | number:'1.2-2' }}</strong></div></div>
+        <div class="col-md-4"><div class="stat-card"><span>Returns in period</span><strong class="text-danger">−{{ s.returnsInPeriod | number:'1.2-2' }}</strong></div></div>
+        <div class="col-md-4"><div class="stat-card"><span>Net purchases</span><strong>{{ s.netPurchases | number:'1.2-2' }}</strong></div></div>
+      </div>
+      <div class="data-table-wrap">
+        <table class="data-table">
+          <thead><tr><th>Purchase</th><th>Date</th><th>Supplier</th><th>Gross</th><th>Returned</th><th>Net</th><th>Status</th></tr></thead>
+          <tbody>
+            <tr *ngIf="purchaseRows.length === 0" class="empty-row"><td colspan="7">No active purchases in range{{ hideFullyReturned ? ' (fully returned invoices are hidden)' : '' }}.</td></tr>
+            <tr *ngFor="let r of purchaseRows" [class.row-muted]="r.returnStatus === 'Partial'">
+              <td>{{ r.purchaseNumber }}</td>
+              <td>{{ r.invoiceDate | appDate }}</td>
+              <td>{{ r.supplierName }}</td>
+              <td>{{ r.grandTotal | number:'1.2-2' }}</td>
+              <td class="text-danger">{{ r.returnedAmount > 0 ? ('−' + (r.returnedAmount | number:'1.2-2')) : '—' }}</td>
+              <td><strong>{{ r.netAmount | number:'1.2-2' }}</strong></td>
+              <td><span class="badge-return" *ngIf="returnStatusLabel(r.returnStatus)">{{ returnStatusLabel(r.returnStatus) }}</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div *ngIf="!loading && activeTab === 'stock'" class="data-table-wrap">
+      <table class="data-table">
+        <thead><tr><th>Product</th><th>SKU</th><th>Category</th><th>Stock</th><th>WAC</th><th>Value</th><th>Sell Price</th></tr></thead>
+        <tbody>
+          <tr *ngIf="stockRows.length === 0" class="empty-row"><td colspan="7">No products found.</td></tr>
+          <tr *ngFor="let r of stockRows">
+            <td>{{ r.productName }}</td>
+            <td>{{ r.sku }}</td>
+            <td>{{ r.categoryName }}</td>
+            <td>{{ r.currentStock }}</td>
+            <td>{{ r.weightedAverageCost | number:'1.2-2' }}</td>
+            <td>{{ r.inventoryValue | number:'1.2-2' }}</td>
+            <td>{{ r.sellingPrice | number:'1.2-2' }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div *ngIf="!loading && activeTab === 'expenses'" class="data-table-wrap">
+      <table class="data-table">
+        <thead><tr><th>Number</th><th>Date</th><th>Category</th><th>Amount</th><th>Remarks</th></tr></thead>
+        <tbody>
+          <tr *ngIf="expenseRows.length === 0" class="empty-row"><td colspan="5">No expenses in range.</td></tr>
+          <tr *ngFor="let r of expenseRows">
+            <td>{{ r.expenseNumber }}</td>
+            <td>{{ r.expenseDate | appDate }}</td>
+            <td>{{ r.categoryName }}</td>
+            <td>{{ r.amount | number:'1.2-2' }}</td>
+            <td>{{ r.description || '—' }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div *ngIf="!loading && activeTab === 'profit' && profit as profitSummary" class="row g-3">
+      <div class="col-md-3"><div class="stat-card"><span>Net Sales</span><strong>{{ profitSummary.totalSales | number:'1.2-2' }}</strong></div></div>
+      <div class="col-md-3"><div class="stat-card"><span>COGS</span><strong>{{ profitSummary.totalCost | number:'1.2-2' }}</strong></div></div>
+      <div class="col-md-3"><div class="stat-card"><span>Gross Profit</span><strong>{{ profitSummary.grossProfit | number:'1.2-2' }}</strong></div></div>
+      <div class="col-md-3"><div class="stat-card"><span>Net Profit</span><strong>{{ profitSummary.netProfit | number:'1.2-2' }}</strong></div></div>
+      <div class="col-md-12">
+        <p class="hint-text mb-0">
+          Expenses in period: {{ profitSummary.totalExpenses | number:'1.2-2' }}
+          <span *ngIf="profitSummary.totalSaleReturns > 0" class="ms-2">
+            · Sale returns in period: {{ profitSummary.totalSaleReturns | number:'1.2-2' }}
+          </span>
+        </p>
+      </div>
+    </div>
+  </div>
+</div>

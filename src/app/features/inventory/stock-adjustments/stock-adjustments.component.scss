@@ -1,0 +1,50 @@
+.adjustment-lines-table {
+  table-layout: fixed;
+  min-width: 720px;
+
+  .col-product {
+    width: 48%;
+    min-width: 16rem;
+  }
+
+  .col-system-stock {
+    width: 8rem;
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  .col-physical {
+    width: 9rem;
+  }
+
+  .col-cost {
+    width: 8rem;
+  }
+
+  .col-notes {
+    width: auto;
+  }
+
+  .col-actions {
+    width: 2.5rem;
+  }
+
+  .system-stock-value {
+    display: inline-block;
+    font-weight: 600;
+    color: var(--ims-primary-dark);
+    padding-top: 0.35rem;
+  }
+
+  .system-stock-empty {
+    display: inline-block;
+    color: var(--ims-text-muted);
+    font-size: 0.8125rem;
+    padding-top: 0.35rem;
+  }
+
+  app-searchable-select {
+    display: block;
+    min-width: 14rem;
+  }
+}

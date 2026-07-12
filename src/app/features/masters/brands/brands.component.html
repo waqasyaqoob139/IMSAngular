@@ -1,0 +1,61 @@
+<div class="page-shell" appPageNewShortcut [pageNewShortcutActive]="!saving" (pageNewShortcut)="openCreate()">
+  <div *ngIf="message" class="alert alert-success">{{ message }}</div>
+  <div *ngIf="errorMessage" class="alert alert-danger">{{ errorMessage }}</div>
+
+  <ng-container *ngIf="!showForm">
+    <div class="page-header">
+      <h4>Brands</h4>
+      <button class="btn btn-primary" (click)="openCreate()" [disabled]="loading">+ Add Brand</button>
+    </div>
+
+    <div class="content-panel">
+      <div *ngIf="loading" class="loading-row">Loading...</div>
+      <div class="data-table-wrap" *ngIf="!loading">
+        <table class="data-table">
+          <thead>
+            <tr><th>Name</th><th>Status</th><th class="col-actions">Actions</th></tr>
+          </thead>
+          <tbody>
+            <tr *ngIf="items.length === 0" class="empty-row"><td colspan="3">No brands found.</td></tr>
+            <tr *ngFor="let item of items">
+              <td>{{ item.brandName }}</td>
+              <td>
+                <span class="badge" [class.text-bg-success]="item.isActive" [class.text-bg-secondary]="!item.isActive">
+                  {{ item.isActive ? 'Active' : 'Inactive' }}
+                </span>
+              </td>
+              <td class="col-actions">
+                <button class="btn btn-sm btn-outline-primary me-1" (click)="openEdit(item)">Edit</button>
+                <button class="btn btn-sm btn-outline-danger" (click)="remove(item)">Delete</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </ng-container>
+
+  <ng-container *ngIf="showForm">
+    <div class="page-header">
+      <div class="page-header-left">
+        <button type="button" class="btn-back" (click)="cancel()" [disabled]="saving">← Back</button>
+        <h4>{{ editingId ? 'Edit Brand' : 'Add Brand' }}</h4>
+      </div>
+    </div>
+
+    <div class="form-panel">
+      <form [formGroup]="form" (ngSubmit)="save()" appSaveShortcut [saveShortcutActive]="!saving" (saveShortcut)="save()">
+        <div class="row g-2">
+          <div class="col-md-6">
+            <label class="form-label">Brand Name *</label>
+            <input class="form-control" formControlName="brandName" />
+          </div>
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-success" type="submit" [disabled]="saving">{{ saving ? 'Saving...' : 'Save' }}</button>
+          <button class="btn btn-secondary" type="button" (click)="cancel()" [disabled]="saving">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </ng-container>
+</div>

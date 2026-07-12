@@ -1,0 +1,155 @@
+<div class="page-shell" appPageNewShortcut [pageNewShortcutActive]="!saving" (pageNewShortcut)="startNew()">
+  <div *ngIf="message" class="alert alert-success">{{ message }}</div>
+  <div *ngIf="errorMessage" class="alert alert-danger">{{ errorMessage }}</div>
+
+  <ng-container *ngIf="!showForm && !viewId">
+    <div class="content-panel">
+      <div class="toolbar">
+        <span class="toolbar-title">Customer Payments</span>
+        <input class="form-control txn-list-search" appTxnAutofocus placeholder="Search..." [(ngModel)]="search" (keyup.enter)="load()" />
+        <button class="btn btn-outline-secondary btn-sm" (click)="load()" [disabled]="loading">Search</button>
+        <div class="toolbar-actions">
+          <button class="btn btn-primary btn-sm" (click)="openCreate()">+ Record Payment</button>
+        </div>
+      </div>
+      <div *ngIf="loading" class="loading-row">Loading...</div>
+      <div class="data-table-wrap" *ngIf="!loading">
+        <table class="data-table">
+          <thead>
+            <tr><th>Receipt #</th><th>Date</th><th>Customer</th><th>Amount</th><th>Method</th><th class="col-actions">Actions</th></tr>
+          </thead>
+          <tbody>
+            <tr *ngIf="items.length === 0" class="empty-row"><td colspan="6">No payments yet.</td></tr>
+            <tr *ngFor="let p of items">
+              <td><strong>{{ p.paymentNumber }}</strong></td>
+              <td>{{ p.paymentDate | appDate }}</td>
+              <td>{{ p.customerName }}</td>
+              <td>{{ p.amount | number:'1.2-2' }}</td>
+              <td>{{ p.paymentMethodName }}</td>
+              <td class="col-actions">
+                <button class="btn btn-sm btn-outline-primary" (click)="openView(p)">View</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </ng-container>
+
+  <ng-container *ngIf="viewId">
+    <div class="content-panel">
+      <div class="toolbar">
+        <button type="button" class="txn-list-link" (click)="closeView()">← Back</button>
+        <span class="toolbar-title">Payment {{ viewDetail?.['paymentNumber'] || '...' }}</span>
+      </div>
+      <div *ngIf="loadingDetail" class="loading-row">Loading...</div>
+      <div class="section-card invoice-view" *ngIf="!loadingDetail && viewDetail">
+        <div class="section-card__body">
+          <div class="info-grid">
+            <div class="info-item"><label>Customer</label><span>{{ viewDetail['customerName'] }}</span></div>
+            <div class="info-item"><label>Date</label><span>{{ $any(viewDetail['paymentDate']) | appDate }}</span></div>
+            <div class="info-item"><label>Amount</label><span>{{ $any(viewDetail['amount']) | number:'1.2-2' }}</span></div>
+            <div class="info-item"><label>Method</label><span>{{ viewDetail['paymentMethodName'] }}</span></div>
+            <div class="info-item" *ngIf="viewDetail['referenceNumber']"><label>Reference</label><span>{{ viewDetail['referenceNumber'] }}</span></div>
+            <div class="info-item" *ngIf="viewDetail['remarks']"><label>Remarks</label><span>{{ viewDetail['remarks'] }}</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="section-card" *ngIf="!loadingDetail && viewDetail" appSaveShortcut saveShortcutFocusOnly [saveShortcutActive]="!savingCorrection" (saveShortcut)="saveCorrection()">
+        <div class="section-card__header"><span class="section-label">Correct payment</span></div>
+        <div class="section-card__body">
+          <p class="text-muted small mb-2">Fix a wrong date or amount. Later payments are not changed — customer balance, ledger, and cash/bank books are adjusted automatically.</p>
+          <div class="d-flex flex-wrap align-items-end gap-2">
+            <div>
+              <label class="form-label small mb-1">Payment date</label>
+              <input type="date" class="form-control form-control-sm" [(ngModel)]="correctedDate" [disabled]="savingCorrection" />
+            </div>
+            <div>
+              <label class="form-label small mb-1">Amount</label>
+              <input type="number" class="form-control form-control-sm" [(ngModel)]="correctedAmount" min="0.01" step="0.01" [disabled]="savingCorrection" />
+            </div>
+            <button type="button" class="btn btn-outline-primary btn-sm" (click)="saveCorrection()" [disabled]="savingCorrection || !correctedDate || correctedAmount <= 0">
+              {{ savingCorrection ? 'Saving...' : 'Save correction' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </ng-container>
+
+  <ng-container *ngIf="showForm">
+    <div class="form-panel">
+      <form [formGroup]="form" (ngSubmit)="save()" appTxnFormKeyboard [txnKeyboardActive]="!saving" (txnSave)="save()" (txnCancel)="cancel()">
+        <div class="txn-form-bar">
+          <div class="txn-head">
+            <div class="txn-head__left">
+              <span class="txn-head__type">Customer Payment</span>
+            </div>
+            <button type="button" class="btn btn-primary btn-sm txn-head__list-btn" (click)="openList()" [disabled]="saving">Payments List</button>
+          </div>
+        </div>
+        <div class="row g-2">
+          <div class="col-md-6">
+            <label class="form-label">Customer *</label>
+            <app-searchable-select formControlName="customerId" appTxnAutofocus
+              [items]="customerSelectOptions" placeholder="Choose customer..."
+              [disabled]="loadingParties" />
+            <small class="text-muted" *ngIf="loadingParties">Loading balances...</small>
+          </div>
+          <div class="col-12" *ngIf="selectedCustomer">
+            <div class="balance-panel" [class.balance-panel--due]="selectedBalance > 0">
+              <div>
+                <span class="balance-panel__label">Total outstanding</span>
+                <strong class="balance-panel__amount">{{ selectedBalance | number:'1.2-2' }}</strong>
+                <span class="text-muted ms-2">{{ selectedCustomer.name }}</span>
+                <div class="balance-panel__breakdown" *ngIf="selectedBalance > 0">
+                  <span *ngIf="selectedOpeningBalance > 0">
+                    Opening balance: {{ selectedOpeningBalance | number:'1.2-2' }}
+                  </span>
+                  <span *ngIf="selectedCreditDue > 0">
+                    From credit sales: {{ selectedCreditDue | number:'1.2-2' }}
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                class="btn btn-sm btn-outline-primary"
+                *ngIf="selectedBalance > 0"
+                (click)="payFullBalance()">
+                Pay full balance
+              </button>
+            </div>
+            <small class="text-warning d-block mt-1" *ngIf="selectedBalance <= 0">
+              This customer has no outstanding credit balance.
+            </small>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Date *</label>
+            <input type="date" class="form-control" formControlName="paymentDate" />
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Amount *</label>
+            <input type="number" class="form-control" formControlName="amount" step="0.01" min="0.01" />
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Payment Method</label>
+            <app-searchable-select formControlName="paymentMethodId"
+              [items]="paymentMethodOptions" />
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Reference #</label>
+            <input class="form-control" formControlName="referenceNumber" />
+          </div>
+          <div class="col-md-12">
+            <label class="form-label">Remarks</label>
+            <input class="form-control" formControlName="remarks" />
+          </div>
+        </div>
+        <div class="form-footer">
+          <button class="btn btn-success btn-sm" type="submit" [disabled]="saving" title="Save (Ctrl+S)">{{ saving ? 'Saving...' : 'Save Payment' }}</button>
+          <button class="btn btn-secondary btn-sm" type="button" (click)="cancel()" [disabled]="saving" title="Back to list (Esc)">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </ng-container>
+</div>

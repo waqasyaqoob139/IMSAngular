@@ -1,0 +1,110 @@
+<div class="page-shell">
+  <div *ngIf="message" class="alert alert-success">{{ message }}</div>
+  <div *ngIf="errorMessage" class="alert alert-danger">{{ errorMessage }}</div>
+
+  <ng-container *ngIf="!showForm">
+    <div class="page-header">
+      <div>
+        <h4>Salary Payments</h4>
+        <p class="hint-text mb-0">One-off payments — advance, bonus, or outside regular payroll</p>
+      </div>
+      <button class="btn btn-primary" (click)="openCreate()" [disabled]="loading">+ Record Payment</button>
+    </div>
+
+    <div class="hr-stats" *ngIf="!loading && items.length > 0">
+      <div class="hr-stat-card hr-stat-card--accent">
+        <span class="label">Payments</span>
+        <span class="value">{{ items.length }}</span>
+      </div>
+      <div class="hr-stat-card">
+        <span class="label">Total paid</span>
+        <span class="value">{{ totalPaid | number:'1.0-0' }}</span>
+      </div>
+    </div>
+
+    <div class="content-panel">
+      <div class="toolbar">
+        <input class="form-control" placeholder="Search payment or employee..." [(ngModel)]="search" (keyup.enter)="load()" />
+        <button class="btn btn-outline-secondary" (click)="load()" [disabled]="loading">Search</button>
+      </div>
+
+      <div *ngIf="loading" class="loading-row">Loading...</div>
+
+      <div class="hr-empty" *ngIf="!loading && items.length === 0">
+        <h6>No payments recorded</h6>
+        <p>Use this for salary advance or bonus. Regular wages go through Payroll Runs.</p>
+        <button class="btn btn-primary" (click)="openCreate()">+ Record Payment</button>
+      </div>
+
+      <div class="data-table-wrap" *ngIf="!loading && items.length > 0">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Payment #</th>
+              <th>Date</th>
+              <th>Employee</th>
+              <th class="hr-money">Amount</th>
+              <th>Method</th>
+              <th>Remarks</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let item of items">
+              <td><code>{{ item.paymentNumber }}</code></td>
+              <td>{{ item.paymentDate | appDate }}</td>
+              <td>
+                <strong>{{ item.employeeName }}</strong>
+                <span class="text-muted small"> ({{ item.employeeCode }})</span>
+              </td>
+              <td class="hr-money"><strong>{{ item.amount | number:'1.2-2' }}</strong></td>
+              <td>{{ item.paymentMethodName }}</td>
+              <td>{{ item.remarks || '—' }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </ng-container>
+
+  <ng-container *ngIf="showForm">
+    <div class="page-header">
+      <div class="page-header-left">
+        <button type="button" class="btn-back" (click)="cancel()" [disabled]="saving">← Back</button>
+        <h4>Record Payment</h4>
+      </div>
+    </div>
+
+    <div class="form-panel">
+      <form [formGroup]="form" (ngSubmit)="save()">
+        <div class="hr-form-section">
+          <div class="row g-2">
+            <div class="col-md-6">
+              <label class="form-label">Employee *</label>
+              <app-searchable-select formControlName="employeeId" [items]="employeeSelectOptions" placeholder="Choose employee..." />
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Payment date *</label>
+              <input type="date" class="form-control" formControlName="paymentDate" />
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Method *</label>
+              <app-searchable-select formControlName="paymentMethodId" [items]="paymentMethodOptions" />
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Amount *</label>
+              <input type="number" class="form-control" formControlName="amount" min="0.01" step="0.01" />
+            </div>
+            <div class="col-md-8">
+              <label class="form-label">Remarks</label>
+              <input class="form-control" formControlName="remarks" placeholder="e.g. Salary advance" />
+            </div>
+          </div>
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-success" type="submit" [disabled]="saving">{{ saving ? 'Saving...' : 'Save Payment' }}</button>
+          <button class="btn btn-secondary" type="button" (click)="cancel()" [disabled]="saving">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </ng-container>
+</div>

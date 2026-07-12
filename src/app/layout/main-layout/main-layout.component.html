@@ -1,0 +1,131 @@
+<nav class="navbar navbar-expand-lg app-navbar">
+  <div class="container-fluid px-4">
+    <a class="navbar-brand" routerLink="/dashboard" [title]="branding.displayName()">
+      <span class="brand-mark">{{ brandInitials }}</span>
+      <span class="brand-text">{{ branding.displayName() }}</span>
+    </a>
+
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+
+    <div class="collapse navbar-collapse" id="mainNav">
+      <ul class="navbar-nav me-auto mb-2 mb-lg-0 app-nav-menu">
+        <li class="nav-item" *ngIf="can(p.dashboard)">
+          <a class="nav-link" routerLink="/dashboard" routerLinkActive="active">Dashboard</a>
+        </li>
+
+        <li class="nav-item dropdown" *ngIf="hasSetupMenu()">
+          <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">Setup</a>
+          <ul class="dropdown-menu">
+            <li *ngIf="canSetupPage(p.setupProducts)"><a class="dropdown-item" routerLink="/masters/products">Products</a></li>
+            <li *ngIf="canSetupPage(p.setupCategories)"><a class="dropdown-item" routerLink="/masters/categories">Categories</a></li>
+            <li *ngIf="canSetupPage(p.setupBrands)"><a class="dropdown-item" routerLink="/masters/brands">Brands</a></li>
+            <li *ngIf="canSetupPage(p.setupUnits)"><a class="dropdown-item" routerLink="/masters/units">Units</a></li>
+            <li *ngIf="canSetupPage(p.setupCustomers) || canSetupPage(p.setupSuppliers)"><hr class="dropdown-divider" /></li>
+            <li *ngIf="canSetupPage(p.setupCustomers)"><a class="dropdown-item" routerLink="/masters/customers">Customers</a></li>
+            <li *ngIf="canSetupPage(p.setupSuppliers)"><a class="dropdown-item" routerLink="/masters/suppliers">Suppliers</a></li>
+            <li *ngIf="canSetupPage(p.setupLocations) || canSetupPage(p.setupExpenseCategories)"><hr class="dropdown-divider" /></li>
+            <li *ngIf="canSetupPage(p.setupLocations)"><a class="dropdown-item" routerLink="/masters/locations">Store Locations</a></li>
+            <li *ngIf="canSetupPage(p.setupExpenseCategories)"><a class="dropdown-item" routerLink="/masters/expense-categories">Expense Categories</a></li>
+          </ul>
+        </li>
+
+        <li class="nav-item dropdown" *ngIf="can(p.sales) || can(p.purchases) || can(p.payments) || can(p.expenses) || can(p.returns)">
+          <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">Transactions</a>
+          <ul class="dropdown-menu">
+            <li *ngIf="can(p.sales)"><a class="dropdown-item" routerLink="/transactions/sales">Sales / POS</a></li>
+            <li *ngIf="can(p.returns)"><a class="dropdown-item" routerLink="/transactions/sale-returns">Sales Returns</a></li>
+            <li *ngIf="can(p.purchases)"><a class="dropdown-item" routerLink="/transactions/purchases">Purchases</a></li>
+            <li *ngIf="can(p.returns)"><a class="dropdown-item" routerLink="/transactions/purchase-returns">Purchase Returns</a></li>
+            <li *ngIf="can(p.payments) || can(p.expenses)"><hr class="dropdown-divider" /></li>
+            <li *ngIf="can(p.payments)"><a class="dropdown-item" routerLink="/transactions/customer-payments">Customer Payments</a></li>
+            <li *ngIf="can(p.payments)"><a class="dropdown-item" routerLink="/transactions/supplier-payments">Supplier Payments</a></li>
+            <li *ngIf="can(p.expenses)"><a class="dropdown-item" routerLink="/transactions/expenses">Expenses</a></li>
+          </ul>
+        </li>
+
+        <li class="nav-item" *ngIf="can(p.usersAdmin)">
+          <a class="nav-link" routerLink="/users" routerLinkActive="active">Users &amp; Roles</a>
+        </li>
+
+        <li class="nav-item dropdown" *ngIf="hasHrMenu()">
+          <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">HR &amp; Payroll</a>
+          <ul class="dropdown-menu">
+            <li *ngIf="canHrPage(p.hrEmployees)"><a class="dropdown-item" routerLink="/hr/employees">Employees</a></li>
+            <li *ngIf="canHrPage(p.hrPayroll)"><a class="dropdown-item" routerLink="/hr/payroll">Payroll Runs</a></li>
+            <li *ngIf="canHrPage(p.hrSalaryPayments)"><a class="dropdown-item" routerLink="/hr/salary-payments">Salary Payments</a></li>
+          </ul>
+        </li>
+
+        <li class="nav-item dropdown" *ngIf="hasInventoryMenu()">
+          <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">Inventory</a>
+          <ul class="dropdown-menu">
+            <li *ngIf="canInventoryPage(p.inventoryLedger)"><a class="dropdown-item" routerLink="/inventory/ledger">Stock Ledger</a></li>
+            <li *ngIf="canInventoryPage(p.inventoryAdjustments)"><a class="dropdown-item" routerLink="/inventory/adjustments">Stock Adjustments</a></li>
+            <li *ngIf="canInventoryPage(p.inventoryClaims)"><a class="dropdown-item" routerLink="/inventory/claims">Vendor Claims</a></li>
+            <li *ngIf="canInventoryPage(p.inventoryTransfers)"><a class="dropdown-item" routerLink="/inventory/transfers">Stock Transfers</a></li>
+          </ul>
+        </li>
+
+        <li class="nav-item dropdown" *ngIf="hasReportsMenu()">
+          <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">Reports</a>
+          <ul class="dropdown-menu">
+            <li *ngIf="canReportsPage(p.reportsSummary)"><a class="dropdown-item" routerLink="/reports">Sales / Purchase / Stock / Profit</a></li>
+            <li *ngIf="canReportsPage(p.reportsLedgers)"><a class="dropdown-item" routerLink="/reports/ledgers">Ledgers</a></li>
+            <li *ngIf="canReportsPage(p.reportsCashBank)"><a class="dropdown-item" routerLink="/reports/cash-bank">Cash &amp; Bank</a></li>
+          </ul>
+        </li>
+
+        <li class="nav-item" *ngIf="can(p.settings)">
+          <a class="nav-link" routerLink="/settings" routerLinkActive="active">Settings</a>
+        </li>
+      </ul>
+
+      <div class="txn-pause-chip" *ngIf="txnPauseHint" [title]="txnPauseHint">
+        {{ txnPauseHint }}
+      </div>
+
+      <div class="navbar-search me-3" (mouseleave)="searchOpen = false">
+        <input
+          class="form-control form-control-sm global-search-input"
+          placeholder="Search products, invoices..."
+          [(ngModel)]="searchTerm"
+          (keyup.enter)="onSearch()"
+          (input)="onSearch()" />
+        <div class="search-dropdown" *ngIf="searchOpen && searchResult">
+          <div *ngIf="searchResult.products.length">
+            <div class="search-group-label">Products</div>
+            <button type="button" class="search-item" *ngFor="let p of searchResult.products" (click)="goProduct(p.id)">{{ p.name }}</button>
+          </div>
+          <div *ngIf="searchResult.customers.length">
+            <div class="search-group-label">Customers</div>
+            <button type="button" class="search-item" *ngFor="let c of searchResult.customers" (click)="goCustomer(c.id)">{{ c.name }}</button>
+          </div>
+          <div *ngIf="searchResult.suppliers.length">
+            <div class="search-group-label">Suppliers</div>
+            <button type="button" class="search-item" *ngFor="let s of searchResult.suppliers" (click)="goSupplier(s.id)">{{ s.name }}</button>
+          </div>
+          <div *ngIf="searchResult.documents.length">
+            <div class="search-group-label">Documents</div>
+            <button type="button" class="search-item" *ngFor="let d of searchResult.documents" (click)="goDocument(d)">
+              {{ d.number }} — {{ d.title }}
+            </button>
+          </div>
+          <div class="search-empty" *ngIf="!searchResult.products.length && !searchResult.customers.length && !searchResult.suppliers.length && !searchResult.documents.length">
+            No results
+          </div>
+        </div>
+      </div>
+
+      <div class="navbar-user">
+        <span class="user-name">{{ user()?.fullName }}</span>
+        <button class="btn btn-logout" (click)="logout()">Logout</button>
+      </div>
+    </div>
+  </div>
+</nav>
+
+<main class="page-content">
+  <router-outlet></router-outlet>
+</main>

@@ -1,0 +1,124 @@
+<div class="page-shell" appPageNewShortcut [pageNewShortcutActive]="!saving" (pageNewShortcut)="openCreate()">
+  <div *ngIf="message" class="alert alert-success">{{ message }}</div>
+  <div *ngIf="errorMessage" class="alert alert-danger">{{ errorMessage }}</div>
+
+  <ng-container *ngIf="!showForm">
+    <div class="page-header">
+      <div>
+        <h4>Stock Adjustments</h4>
+        <p class="hint-text mb-0">Set physical stock count at a location</p>
+      </div>
+      <button class="btn btn-primary" (click)="openCreate()">+ New Adjustment</button>
+    </div>
+    <div class="content-panel">
+      <div *ngIf="loading" class="loading-row">Loading...</div>
+      <div class="data-table-wrap" *ngIf="!loading">
+        <table class="data-table">
+          <thead>
+            <tr><th>Number</th><th>Date</th><th>Type</th><th>Location</th><th>Notes</th><th>Lines</th></tr>
+          </thead>
+          <tbody>
+            <tr *ngIf="items.length === 0" class="empty-row"><td colspan="6">No adjustments yet.</td></tr>
+            <tr *ngFor="let a of items">
+              <td><strong>{{ a.adjustmentNumber }}</strong></td>
+              <td>{{ a.adjustmentDate | appDate }}</td>
+              <td>{{ a.adjustmentTypeName }}</td>
+              <td>{{ a.locationName }}</td>
+              <td>{{ a.reason }}</td>
+              <td>{{ a.lineCount }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </ng-container>
+
+  <ng-container *ngIf="showForm">
+    <div class="page-header">
+      <div class="page-header-left">
+        <button type="button" class="btn-back" (click)="cancel()" [disabled]="saving">← Back</button>
+        <h4>New Stock Adjustment</h4>
+      </div>
+    </div>
+    <div class="form-panel">
+      <form [formGroup]="form" (ngSubmit)="save()" appSaveShortcut [saveShortcutActive]="!saving" (saveShortcut)="save()">
+        <div class="row g-2 mb-3">
+          <div class="col-md-3">
+            <label class="form-label">Date *</label>
+            <input type="date" class="form-control" formControlName="adjustmentDate" />
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Location *</label>
+            <app-searchable-select formControlName="locationId"
+              [items]="locationSelectOptions" placeholder="Choose..." />
+            <small class="text-muted" *ngIf="loadingLocationStock">Loading stock for location…</small>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Type *</label>
+            <app-searchable-select formControlName="adjustmentTypeId"
+              [items]="adjustmentTypeOptions" />
+            <small class="text-muted">Vendor claims use the Vendor Claims screen.</small>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Notes</label>
+            <input class="form-control" formControlName="notes" placeholder="Optional detail" />
+          </div>
+        </div>
+
+        <p class="hint-text mb-2">
+          Enter the <strong>physical count</strong> you counted. System stock is shown for the selected location.
+        </p>
+
+        <div class="data-table-wrap">
+          <table class="data-table adjustment-lines-table">
+            <thead>
+              <tr>
+                <th class="col-product">Product</th>
+                <th class="col-system-stock">System stock</th>
+                <th class="col-physical">Physical count</th>
+                <th class="col-cost">Unit cost</th>
+                <th class="col-notes">Notes</th>
+                <th class="col-actions"></th>
+              </tr>
+            </thead>
+            <tbody formArrayName="lines">
+              <tr *ngFor="let line of lines.controls; let i = index" [formGroupName]="i">
+                <td class="col-product">
+                  <app-searchable-select formControlName="productId" [wide]="true"
+                    [items]="productSelectOptions" placeholder="Select product..."
+                    (selectionChange)="onProductChange(i)" />
+                </td>
+                <td class="col-system-stock">
+                  <span class="system-stock-value" *ngIf="line.get('productId')?.value">
+                    {{ lineSystemStock(i) | number:'1.0-4' }}
+                  </span>
+                  <span class="system-stock-empty" *ngIf="!line.get('productId')?.value">—</span>
+                </td>
+                <td class="col-physical">
+                  <input type="number" class="form-control form-control-sm" formControlName="physicalCount"
+                    step="0.01" min="0" placeholder="Counted qty" />
+                </td>
+                <td class="col-cost">
+                  <input type="number" class="form-control form-control-sm" formControlName="unitCost"
+                    step="0.01" min="0" />
+                </td>
+                <td class="col-notes">
+                  <input class="form-control form-control-sm" formControlName="notes" />
+                </td>
+                <td class="col-actions">
+                  <button type="button" class="btn btn-sm btn-outline-danger" (click)="removeLine(i)">×</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <button type="button" class="btn btn-sm btn-outline-primary mt-2" (click)="addLine()">+ Add Line</button>
+
+        <div class="form-footer">
+          <button class="btn btn-success" type="submit" [disabled]="saving">{{ saving ? 'Saving...' : 'Save Adjustment' }}</button>
+          <button class="btn btn-secondary" type="button" (click)="cancel()" [disabled]="saving">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </ng-container>
+</div>

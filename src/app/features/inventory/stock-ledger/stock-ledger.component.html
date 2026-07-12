@@ -1,0 +1,41 @@
+<div class="page-shell">
+  <div class="page-header">
+    <div>
+      <h4>Stock Ledger</h4>
+      <p class="hint-text mb-0">Transaction-driven inventory movements</p>
+    </div>
+  </div>
+  <div class="content-panel">
+    <div class="toolbar">
+      <app-searchable-select [(ngModel)]="productId" [items]="productSelectOptions" [wide]="true"
+        [nullable]="true" nullLabel="All products" />
+      <app-searchable-select [(ngModel)]="locationId" [items]="locationSelectOptions"
+        [nullable]="true" nullLabel="All locations" />
+      <input type="date" class="form-control" [(ngModel)]="fromDate" />
+      <input type="date" class="form-control" [(ngModel)]="toDate" />
+      <button class="btn btn-primary" (click)="load()" [disabled]="loading">Apply</button>
+    </div>
+    <div *ngIf="loading" class="loading-row">Loading...</div>
+    <div class="data-table-wrap" *ngIf="!loading">
+      <table class="data-table">
+        <thead>
+          <tr><th>Date</th><th>Product</th><th>Location</th><th>Type</th><th>Ref</th><th>In</th><th>Out</th><th>Balance</th><th>Cost</th></tr>
+        </thead>
+        <tbody>
+          <tr *ngIf="rows.length === 0" class="empty-row"><td colspan="9">No movements found.</td></tr>
+          <tr *ngFor="let r of rows">
+            <td>{{ r.movementDate | appDate:'datetime' }}</td>
+            <td>{{ r.productName }}</td>
+            <td>{{ r.locationName }}</td>
+            <td>{{ r.movementType }}</td>
+            <td>{{ r.referenceType }}-{{ r.referenceId }}</td>
+            <td>{{ r.quantityIn }}</td>
+            <td>{{ r.quantityOut }}</td>
+            <td>{{ r.balanceQuantity }}</td>
+            <td>{{ r.totalCost | number:'1.2-2' }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>

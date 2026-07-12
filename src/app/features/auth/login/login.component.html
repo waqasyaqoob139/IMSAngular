@@ -1,0 +1,37 @@
+<div class="login-page">
+  <div class="login-panel login-panel--brand">
+    <div class="login-panel__content">
+      <h1>Inventory Management System</h1>
+      <p>Inventory &amp; business management for retail and wholesale shops.</p>
+      <ul class="login-features">
+        <li>Stock &amp; product tracking</li>
+        <li>Sales, purchases &amp; ledgers</li>
+        <li>Customers &amp; suppliers</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="login-panel login-panel--form">
+    <div class="login-card">
+      <h2>Welcome back</h2>
+      <p class="login-subtitle">Sign in to your account</p>
+
+      <form [formGroup]="form" (ngSubmit)="submit()" appSaveShortcut [saveShortcutActive]="!loading" (saveShortcut)="submit()">
+        <div class="mb-3">
+          <label class="form-label">Username</label>
+          <input type="text" class="form-control" formControlName="username" autocomplete="username" placeholder="Enter username" />
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Password</label>
+          <input type="password" class="form-control" formControlName="password" autocomplete="current-password" placeholder="Enter password" />
+        </div>
+
+        <div *ngIf="errorMessage" class="alert alert-danger py-2">{{ errorMessage }}</div>
+
+        <button class="btn btn-primary w-100 btn-signin" type="submit" [disabled]="loading">
+          {{ loading ? 'Signing in...' : 'Sign In' }}
+        </button>
+      </form>
+    </div>
+  </div>
+</div>

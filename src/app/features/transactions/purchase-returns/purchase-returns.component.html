@@ -1,0 +1,116 @@
+<div class="page-shell" appPageNewShortcut [pageNewShortcutActive]="!saving" (pageNewShortcut)="startNew()">
+  <div *ngIf="message" class="alert alert-success">{{ message }}</div>
+  <div *ngIf="errorMessage" class="alert alert-danger">{{ errorMessage }}</div>
+
+  <ng-container *ngIf="!showForm && !viewId">
+    <div class="content-panel">
+      <div class="toolbar">
+        <span class="toolbar-title">Purchase Returns</span>
+        <input class="form-control txn-list-search" appTxnAutofocus placeholder="Search..." [(ngModel)]="search" (keyup.enter)="load()" />
+        <button class="btn btn-outline-secondary btn-sm" (click)="load()" [disabled]="loading">Search</button>
+        <div class="toolbar-actions">
+          <button class="btn btn-primary btn-sm" (click)="openCreate()">+ New Return</button>
+        </div>
+      </div>
+      <div *ngIf="loading" class="loading-row">Loading...</div>
+      <div class="data-table-wrap" *ngIf="!loading">
+        <table class="data-table">
+          <thead>
+            <tr><th>Return #</th><th>Date</th><th>Purchase</th><th>Supplier</th><th>Amount</th><th class="col-actions">Actions</th></tr>
+          </thead>
+          <tbody>
+            <tr *ngIf="items.length === 0" class="empty-row"><td colspan="6">No purchase returns yet.</td></tr>
+            <tr *ngFor="let r of items">
+              <td><strong>{{ r.purchaseReturnNumber }}</strong></td>
+              <td>{{ r.returnDate | appDate }}</td>
+              <td>{{ r.purchaseNumber }}</td>
+              <td>{{ r.supplierName }}</td>
+              <td>{{ r.grandTotal | number:'1.2-2' }}</td>
+              <td class="col-actions"><button class="btn btn-sm btn-outline-primary" (click)="openView(r)">View</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </ng-container>
+
+  <ng-container *ngIf="viewId">
+    <div class="content-panel">
+      <div class="toolbar">
+        <button type="button" class="txn-list-link" (click)="closeView()">← Back</button>
+        <span class="toolbar-title">Return {{ viewDetail?.['purchaseReturnNumber'] || '...' }}</span>
+      </div>
+      <div *ngIf="loadingView" class="loading-row">Loading...</div>
+      <div class="section-card invoice-view" *ngIf="!loadingView && viewDetail">
+        <div class="section-card__body">
+          <div class="info-grid">
+            <div class="info-item"><label>Purchase</label><span>{{ viewDetail['purchaseNumber'] }}</span></div>
+            <div class="info-item"><label>Supplier</label><span>{{ viewDetail['supplierName'] }}</span></div>
+            <div class="info-item"><label>Date</label><span>{{ $any(viewDetail['returnDate']) | appDate }}</span></div>
+            <div class="info-item"><label>Total</label><span>{{ $any(viewDetail['grandTotal']) | number:'1.2-2' }}</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </ng-container>
+
+  <ng-container *ngIf="showForm">
+    <div class="form-panel">
+      <form [formGroup]="form" (ngSubmit)="save()" appTxnFormKeyboard [txnKeyboardActive]="!saving" (txnSave)="save()" (txnCancel)="cancel()">
+        <div class="txn-form-bar">
+          <div class="txn-head">
+            <div class="txn-head__left">
+              <span class="txn-head__type">Purchase Return</span>
+            </div>
+            <button type="button" class="btn btn-primary btn-sm txn-head__list-btn" (click)="openList()" [disabled]="saving">Returns List</button>
+          </div>
+        </div>
+        <div class="row g-2 mb-3">
+          <div class="col-md-5">
+            <label class="form-label">Purchase *</label>
+            <app-searchable-select formControlName="purchaseId" appTxnAutofocus
+              [items]="purchaseSelectOptions" placeholder="Select purchase..."
+              (selectionChange)="onPurchaseChange()" />
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Return Date *</label>
+            <input type="date" class="form-control" formControlName="returnDate" />
+          </div>
+          <div class="col-md-2">
+            <label class="form-label">Tax</label>
+            <input type="number" class="form-control" formControlName="taxAmount" step="0.01" min="0" />
+          </div>
+          <div class="col-md-12">
+            <label class="form-label">Reason</label>
+            <input class="form-control" formControlName="reason" />
+          </div>
+        </div>
+
+        <div *ngIf="loadingDetail" class="loading-row">Loading lines...</div>
+        <div class="data-table-wrap" *ngIf="!loadingDetail && lines.length > 0">
+          <table class="data-table">
+            <thead>
+              <tr><th>Product</th><th>Available</th><th>Unit Cost</th><th>Return Qty</th><th>Line Total</th></tr>
+            </thead>
+            <tbody formArrayName="lines">
+              <tr *ngFor="let line of lines.controls; let i = index" [formGroupName]="i">
+                <td>{{ line.get('productName')?.value }}</td>
+                <td>{{ line.get('available')?.value }}</td>
+                <td>{{ line.get('unitCost')?.value | number:'1.2-2' }}</td>
+                <td><input type="number" class="form-control form-control-sm" formControlName="returnQuantity" min="0" step="0.01" /></td>
+                <td>{{ lineTotal(line.value) | number:'1.2-2' }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p *ngIf="!loadingDetail && lines.length === 0 && form.get('purchaseId')?.value" class="hint-text">No returnable lines on this purchase.</p>
+
+        <div class="form-footer">
+          <span class="me-3"><strong>Total: {{ grandTotal | number:'1.2-2' }}</strong></span>
+          <button class="btn btn-success btn-sm" type="submit" [disabled]="saving || lines.length === 0" title="Save (Ctrl+S)">{{ saving ? 'Saving...' : 'Save Return' }}</button>
+          <button class="btn btn-secondary btn-sm" type="button" (click)="cancel()" [disabled]="saving" title="Back to list (Esc)">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </ng-container>
+</div>

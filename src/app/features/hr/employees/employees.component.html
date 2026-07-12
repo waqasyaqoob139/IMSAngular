@@ -1,0 +1,196 @@
+<div class="page-shell">
+  <div *ngIf="message" class="alert alert-success">{{ message }}</div>
+  <div *ngIf="errorMessage" class="alert alert-danger">{{ errorMessage }}</div>
+
+  <ng-container *ngIf="!showForm">
+    <div class="page-header">
+      <div>
+        <h4>Employees</h4>
+        <p class="hint-text mb-0">Add staff and set their monthly salary or daily wage rate</p>
+      </div>
+      <button class="btn btn-primary" (click)="openCreate()" [disabled]="loading">+ Add Employee</button>
+    </div>
+
+    <div class="hr-stats" *ngIf="!loading && items.length > 0">
+      <div class="hr-stat-card hr-stat-card--accent">
+        <span class="label">Active</span>
+        <span class="value">{{ activeCount }}</span>
+        <span class="sub">on payroll</span>
+      </div>
+      <div class="hr-stat-card">
+        <span class="label">Monthly</span>
+        <span class="value">{{ monthlyCount }}</span>
+      </div>
+      <div class="hr-stat-card">
+        <span class="label">Daily wage</span>
+        <span class="value">{{ dailyCount }}</span>
+      </div>
+    </div>
+
+    <div class="content-panel">
+      <div class="toolbar">
+        <input class="form-control" placeholder="Search name, code, phone..." [(ngModel)]="search" (keyup.enter)="load()" />
+        <button class="btn btn-outline-secondary" (click)="load()" [disabled]="loading">Search</button>
+      </div>
+
+      <div *ngIf="loading" class="loading-row">Loading...</div>
+
+      <div class="hr-empty" *ngIf="!loading && items.length === 0">
+        <h6>No employees yet</h6>
+        <p>Add your first employee to start running payroll.</p>
+        <button class="btn btn-primary" (click)="openCreate()">+ Add Employee</button>
+      </div>
+
+      <div class="data-table-wrap" *ngIf="!loading && items.length > 0">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Code</th>
+              <th>Name</th>
+              <th>Department</th>
+              <th>Pay type</th>
+              <th class="hr-money">Pay rate</th>
+              <th>Phone</th>
+              <th>Status</th>
+              <th class="col-actions">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let item of items">
+              <td><code>{{ item.employeeCode }}</code></td>
+              <td>
+                <strong>{{ item.fullName }}</strong>
+                <div class="text-muted small" *ngIf="item.designation">{{ item.designation }}</div>
+              </td>
+              <td>{{ item.department || '—' }}</td>
+              <td>
+                <span class="hr-type-tag" [class.hr-type-tag--daily]="item.salaryTypeId === 2">{{ item.salaryTypeName }}</span>
+              </td>
+              <td class="hr-money">{{ salaryLabel(item) }}</td>
+              <td>{{ item.phone || '—' }}</td>
+              <td>
+                <span class="hr-status" [class.hr-status--active]="item.isActive" [class.hr-status--inactive]="!item.isActive">
+                  {{ item.isActive ? 'Active' : 'Inactive' }}
+                </span>
+              </td>
+              <td class="col-actions">
+                <button class="btn btn-sm btn-outline-primary me-1" (click)="openEdit(item)">Edit</button>
+                <button class="btn btn-sm btn-outline-danger" (click)="remove(item)">Delete</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </ng-container>
+
+  <ng-container *ngIf="showForm">
+    <div class="page-header">
+      <div class="page-header-left">
+        <button type="button" class="btn-back" (click)="cancel()" [disabled]="saving">← Back</button>
+        <h4>{{ editingId ? 'Edit Employee' : 'Add Employee' }}</h4>
+      </div>
+    </div>
+
+    <div class="form-panel">
+      <form [formGroup]="form" (ngSubmit)="save()">
+        <div class="hr-form-section">
+          <div class="hr-form-section-title">Basic info</div>
+          <div class="row g-2">
+            <div class="col-md-3">
+              <label class="form-label">Employee code</label>
+              <input class="form-control" formControlName="employeeCode" placeholder="Auto-generated if blank" />
+            </div>
+            <div class="col-md-5">
+              <label class="form-label">Full name *</label>
+              <input class="form-control" formControlName="fullName" placeholder="Employee full name" />
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Join date</label>
+              <input type="date" class="form-control" formControlName="joinDate" />
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Designation</label>
+              <input class="form-control" formControlName="designation" placeholder="e.g. Salesman" />
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Department</label>
+              <input class="form-control" formControlName="department" placeholder="e.g. Store" />
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">CNIC / ID</label>
+              <input class="form-control" formControlName="nationalId" />
+            </div>
+          </div>
+        </div>
+
+        <div class="hr-form-section">
+          <div class="hr-form-section-title">Contact</div>
+          <div class="row g-2">
+            <div class="col-md-4">
+              <label class="form-label">Phone</label>
+              <input class="form-control" formControlName="phone" />
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Email</label>
+              <input type="email" class="form-control" formControlName="email" />
+            </div>
+            <div class="col-md-12">
+              <label class="form-label">Address</label>
+              <input class="form-control" formControlName="address" />
+            </div>
+          </div>
+        </div>
+
+        <div class="hr-form-section">
+          <div class="hr-form-section-title">Pay setup</div>
+          <div class="row g-2">
+            <div class="col-md-12">
+              <label class="form-label d-block mb-2">Pay type *</label>
+              <div class="hr-pill-group">
+                <button type="button" class="hr-pill" [class.hr-pill--active]="!isDaily" (click)="setSalaryType(1)">Monthly salary</button>
+                <button type="button" class="hr-pill" [class.hr-pill--active]="isDaily" (click)="setSalaryType(2)">Daily wages</button>
+              </div>
+            </div>
+            <div class="col-md-4" *ngIf="!isDaily">
+              <label class="form-label">Monthly salary *</label>
+              <input type="number" class="form-control" formControlName="monthlySalary" min="0" step="1" />
+            </div>
+            <div class="col-md-4" *ngIf="isDaily">
+              <label class="form-label">Daily rate *</label>
+              <input type="number" class="form-control" formControlName="dailyRate" min="0" step="1" />
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Bank name</label>
+              <input class="form-control" formControlName="bankName" />
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Bank account</label>
+              <input class="form-control" formControlName="bankAccountNo" />
+            </div>
+          </div>
+        </div>
+
+        <div class="hr-form-section">
+          <div class="row g-2">
+            <div class="col-md-12">
+              <label class="form-label">Notes</label>
+              <textarea class="form-control" rows="2" formControlName="notes" placeholder="Optional"></textarea>
+            </div>
+            <div class="col-md-12">
+              <label class="form-check">
+                <input class="form-check-input" type="checkbox" formControlName="isActive" />
+                <span class="form-check-label">Include in payroll (active)</span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-actions">
+          <button class="btn btn-success" type="submit" [disabled]="saving">{{ saving ? 'Saving...' : 'Save Employee' }}</button>
+          <button class="btn btn-secondary" type="button" (click)="cancel()" [disabled]="saving">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </ng-container>
+</div>

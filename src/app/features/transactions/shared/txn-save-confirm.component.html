@@ -1,0 +1,63 @@
+<div class="txn-save-confirm" *ngIf="open" (keydown)="onKeydown($event)">
+  <div class="txn-save-confirm__backdrop" (click)="cancelled.emit()"></div>
+  <div
+    class="txn-save-confirm__panel"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="txn-save-confirm-title"
+    (click)="$event.stopPropagation()">
+    <h6 id="txn-save-confirm-title" class="txn-save-confirm__title">{{ title }}</h6>
+    <p class="txn-save-confirm__lead">Please review before saving. You can cancel if something looks wrong.</p>
+
+    <div class="txn-save-confirm__summary">
+      <div class="txn-save-confirm__row" *ngIf="partyLabel">
+        <span>{{ partyLabel }}</span>
+      </div>
+      <div class="txn-save-confirm__row">
+        <span>Items</span>
+        <strong>{{ itemCount }}</strong>
+      </div>
+      <div class="txn-save-confirm__row">
+        <span>Total</span>
+        <strong>{{ grandTotal | number:'1.2-2' }}</strong>
+      </div>
+      <div class="txn-save-confirm__row" *ngIf="paymentSummary">
+        <span>Payment</span>
+        <strong>{{ paymentSummary }}</strong>
+      </div>
+    </div>
+
+    <div class="txn-save-confirm__actions" [class.txn-save-confirm__actions--print]="printChoice">
+      <button type="button" class="btn btn-secondary" (click)="cancelled.emit()" [disabled]="saving">
+        Cancel
+      </button>
+      <ng-container *ngIf="printChoice; else simpleSave">
+        <button
+          #confirmBtn
+          type="button"
+          class="btn btn-success"
+          (click)="emitConfirm(false)"
+          [disabled]="saving">
+          {{ saving ? 'Saving...' : saveLabel }}
+        </button>
+        <button
+          type="button"
+          class="btn btn-outline-success"
+          (click)="emitConfirm(true)"
+          [disabled]="saving">
+          {{ saving ? 'Saving...' : saveWithPrintLabel }}
+        </button>
+      </ng-container>
+      <ng-template #simpleSave>
+        <button
+          #confirmBtn
+          type="button"
+          class="btn btn-success"
+          (click)="emitConfirm(false)"
+          [disabled]="saving">
+          {{ saving ? 'Saving...' : saveLabel }}
+        </button>
+      </ng-template>
+    </div>
+  </div>
+</div>

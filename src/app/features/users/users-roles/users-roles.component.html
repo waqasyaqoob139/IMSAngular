@@ -1,0 +1,245 @@
+<div class="page-shell">
+  <div *ngIf="message" class="alert alert-success">{{ message }}</div>
+  <div *ngIf="errorMessage" class="alert alert-danger">{{ errorMessage }}</div>
+
+  <!-- ── Users list ── -->
+  <ng-container *ngIf="view === 'users-list'">
+    <div class="page-header">
+      <h4>Users</h4>
+      <button type="button" class="btn btn-primary" (click)="openCreateUser()" [disabled]="loading">+ Add User</button>
+    </div>
+
+    <div class="ur-tabs">
+      <button type="button" class="ur-tab active" (click)="switchToUsers()">Users</button>
+      <button type="button" class="ur-tab" (click)="switchToRoles()">Roles &amp; Permissions</button>
+    </div>
+
+    <div class="content-panel">
+      <div *ngIf="loading" class="loading-row">Loading users...</div>
+      <div class="data-table-wrap" *ngIf="!loading">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Username</th>
+              <th>Full Name</th>
+              <th>Role</th>
+              <th>Status</th>
+              <th>Last Login</th>
+              <th class="col-actions">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let u of users">
+              <td>
+                {{ u.username }}
+                <span class="badge text-bg-dark ms-1" *ngIf="u.isSuperUser">Owner</span>
+              </td>
+              <td>{{ u.fullName }}</td>
+              <td><span class="ur-role-badge">{{ u.roleName }}</span></td>
+              <td>
+                <span class="badge" [class.text-bg-success]="u.isActive" [class.text-bg-secondary]="!u.isActive">
+                  {{ u.isActive ? 'Active' : 'Inactive' }}
+                </span>
+              </td>
+              <td>{{ u.lastLoginOn ? (u.lastLoginOn | appDate:'datetime') : '—' }}</td>
+              <td class="col-actions">
+                <button type="button" class="btn btn-outline-primary btn-sm" *ngIf="canEditUser(u)" (click)="openEditUser(u)">Edit</button>
+                <button type="button" class="btn btn-outline-danger btn-sm ms-1" *ngIf="canDeleteUser(u)" (click)="deleteUser(u)">Remove</button>
+              </td>
+            </tr>
+            <tr *ngIf="!users.length" class="empty-row"><td colspan="6">No users yet. Click “Add User” to create one.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </ng-container>
+
+  <!-- ── User form ── -->
+  <ng-container *ngIf="view === 'user-form'">
+    <div class="page-header">
+      <div class="page-header-left">
+        <button type="button" class="btn-back" (click)="cancelUserForm()" [disabled]="saving">← Back</button>
+        <h4>{{ userFormTitle }}</h4>
+      </div>
+    </div>
+
+    <div class="form-panel">
+      <form [formGroup]="userForm" (ngSubmit)="saveUser()" appSaveShortcut [saveShortcutActive]="!saving" (saveShortcut)="saveUser()">
+        <div class="ur-form-section">
+          <h6 class="ur-form-section__title">Account</h6>
+          <div class="row g-2">
+            <div class="col-md-4">
+              <label class="form-label">Username *</label>
+              <input class="form-control" formControlName="username" autocomplete="off" />
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Full Name *</label>
+              <input class="form-control" formControlName="fullName" />
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Role *</label>
+              <app-searchable-select formControlName="roleId" [items]="roleSelectOptions" />
+            </div>
+          </div>
+        </div>
+
+        <div class="ur-form-section">
+          <h6 class="ur-form-section__title">Contact (optional)</h6>
+          <div class="row g-2">
+            <div class="col-md-6">
+              <label class="form-label">Email</label>
+              <input type="email" class="form-control" formControlName="email" />
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Phone</label>
+              <input class="form-control" formControlName="phone" />
+            </div>
+          </div>
+        </div>
+
+        <div class="ur-form-section">
+          <h6 class="ur-form-section__title">Security</h6>
+          <div class="alert alert-info py-2" *ngIf="editingSuperUserSelf">
+            System owner account: hidden from client users. Username, role, and active status are locked.
+          </div>
+          <div class="row g-2 align-items-end">
+            <div class="col-md-6">
+              <label class="form-label">{{ editingUserId ? 'New password' : 'Password *' }}</label>
+              <input type="password" class="form-control" formControlName="password" [placeholder]="editingUserId ? 'Leave blank to keep current password' : 'Minimum 6 characters'" />
+            </div>
+            <div class="col-md-6">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" formControlName="isActive" id="userActive" />
+                <label class="form-check-label" for="userActive">Account is active (can sign in)</label>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-actions">
+          <button type="submit" class="btn btn-success" [disabled]="saving">{{ saving ? 'Saving...' : 'Save User' }}</button>
+          <button type="button" class="btn btn-secondary" (click)="cancelUserForm()" [disabled]="saving">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </ng-container>
+
+  <!-- ── Roles list ── -->
+  <ng-container *ngIf="view === 'roles-list'">
+    <div class="page-header">
+      <h4>Roles &amp; Permissions</h4>
+      <button type="button" class="btn btn-primary" (click)="openCreateRole()" [disabled]="loading">+ Add Role</button>
+    </div>
+
+    <div class="ur-tabs">
+      <button type="button" class="ur-tab" (click)="switchToUsers()">Users</button>
+      <button type="button" class="ur-tab active" (click)="switchToRoles()">Roles &amp; Permissions</button>
+    </div>
+
+    <div class="content-panel">
+      <div *ngIf="loading" class="loading-row">Loading roles...</div>
+      <div class="data-table-wrap" *ngIf="!loading">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Role</th>
+              <th>Description</th>
+              <th>Access</th>
+              <th class="col-actions">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let r of roles">
+              <td>
+                <strong>{{ r.roleName }}</strong>
+                <span class="badge text-bg-secondary ms-1" *ngIf="r.isSystem">System</span>
+              </td>
+              <td>{{ r.description || '—' }}</td>
+              <td>
+                <div class="ur-perm-chips">
+                  <span class="ur-perm-chip" *ngFor="let code of displayPermissionCodes(r.permissionCodes)">{{ permissionLabel(code) }}</span>
+                </div>
+              </td>
+              <td class="col-actions">
+                <button type="button" class="btn btn-outline-primary btn-sm" (click)="openEditRole(r)">Edit</button>
+                <button type="button" class="btn btn-outline-danger btn-sm ms-1" *ngIf="!r.isSystem" (click)="deleteRole(r)">Delete</button>
+              </td>
+            </tr>
+            <tr *ngIf="!roles.length" class="empty-row"><td colspan="4">No roles found.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </ng-container>
+
+  <!-- ── Role form ── -->
+  <ng-container *ngIf="view === 'role-form'">
+    <div class="page-header">
+      <div class="page-header-left">
+        <button type="button" class="btn-back" (click)="cancelRoleForm()" [disabled]="saving">← Back</button>
+        <h4>{{ roleFormTitle }}</h4>
+      </div>
+    </div>
+
+    <div class="form-panel">
+      <form [formGroup]="roleForm" (ngSubmit)="saveRole()" appSaveShortcut [saveShortcutActive]="!saving" (saveShortcut)="saveRole()">
+        <div class="ur-form-section">
+          <h6 class="ur-form-section__title">Role details</h6>
+          <div class="row g-2">
+            <div class="col-md-4">
+              <label class="form-label">Role name *</label>
+              <input class="form-control" formControlName="roleName" />
+            </div>
+            <div class="col-md-8">
+              <label class="form-label">Description</label>
+              <input class="form-control" formControlName="description" placeholder="e.g. Daily sales and collections" />
+            </div>
+          </div>
+        </div>
+
+        <div class="ur-form-section">
+          <h6 class="ur-form-section__title">Access rights</h6>
+          <p class="ur-form-section__hint">
+            Each block matches a main menu section. Use <strong>All … pages</strong> for full access, or tick only the screens this role should open.
+          </p>
+
+          <div class="ur-matrix" *ngFor="let group of permissionGroups; trackBy: trackPermissionGroup">
+            <div class="ur-matrix__head">
+              <div class="ur-matrix__head-text">
+                <span class="ur-matrix__category">{{ group.category }}</span>
+                <span class="ur-matrix__hint" *ngIf="group.hint">{{ group.hint }}</span>
+              </div>
+              <label class="ur-matrix__select-all">
+                <input
+                  type="checkbox"
+                  [checked]="isCategoryFullySelected(group)"
+                  (click)="onCategoryToggle(group, $event)" />
+                Select all
+              </label>
+            </div>
+            <div class="ur-matrix__grid">
+              <div
+                class="ur-matrix__card"
+                *ngFor="let p of group.items; trackBy: trackPermissionItem"
+                [class.selected]="isPermissionChecked(p.permissionCode)"
+                [class.disabled]="isPermissionDisabled(p.permissionCode)"
+                (click)="onCardClick(p.permissionCode, $event)">
+                <input
+                  type="checkbox"
+                  [checked]="isPermissionChecked(p.permissionCode)"
+                  [disabled]="isPermissionDisabled(p.permissionCode)"
+                  (click)="onPermissionToggle(p.permissionCode, $event)" />
+                <span>{{ p.displayName }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-actions">
+          <button type="submit" class="btn btn-success" [disabled]="saving">{{ saving ? 'Saving...' : 'Save Role' }}</button>
+          <button type="button" class="btn btn-secondary" (click)="cancelRoleForm()" [disabled]="saving">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </ng-container>
+</div>

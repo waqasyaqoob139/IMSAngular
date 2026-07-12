@@ -1,0 +1,100 @@
+<div class="page-shell" appPageNewShortcut [pageNewShortcutActive]="!saving" (pageNewShortcut)="startNew()">
+  <div *ngIf="message" class="alert alert-success">{{ message }}</div>
+  <div *ngIf="errorMessage" class="alert alert-danger">{{ errorMessage }}</div>
+
+  <ng-container *ngIf="!showForm && !viewId">
+    <div class="content-panel">
+      <div class="toolbar">
+        <span class="toolbar-title">Expenses</span>
+        <input class="form-control txn-list-search" appTxnAutofocus placeholder="Search..." [(ngModel)]="search" (keyup.enter)="load()" />
+        <button class="btn btn-outline-secondary btn-sm" (click)="load()" [disabled]="loading">Search</button>
+        <div class="toolbar-actions">
+          <button class="btn btn-primary btn-sm" (click)="openCreate()">+ Add Expense</button>
+        </div>
+      </div>
+      <div *ngIf="loading" class="loading-row">Loading...</div>
+      <div class="data-table-wrap" *ngIf="!loading">
+        <table class="data-table">
+          <thead>
+            <tr><th>Expense #</th><th>Date</th><th>Category</th><th>Amount</th><th>Description</th><th class="col-actions">Actions</th></tr>
+          </thead>
+          <tbody>
+            <tr *ngIf="items.length === 0" class="empty-row"><td colspan="6">No expenses yet.</td></tr>
+            <tr *ngFor="let e of items">
+              <td><strong>{{ e.expenseNumber }}</strong></td>
+              <td>{{ e.expenseDate | appDate }}</td>
+              <td>{{ e.categoryName }}</td>
+              <td>{{ e.amount | number:'1.2-2' }}</td>
+              <td>{{ e.description || '—' }}</td>
+              <td class="col-actions"><button class="btn btn-sm btn-outline-primary" (click)="openView(e)">View</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </ng-container>
+
+  <ng-container *ngIf="viewId">
+    <div class="content-panel">
+      <div class="toolbar">
+        <button type="button" class="txn-list-link" (click)="closeView()">← Back</button>
+        <span class="toolbar-title">Expense {{ viewDetail?.['expenseNumber'] || '...' }}</span>
+      </div>
+      <div *ngIf="loadingView" class="loading-row">Loading...</div>
+      <div class="section-card invoice-view" *ngIf="!loadingView && viewDetail">
+        <div class="section-card__body">
+          <div class="info-grid">
+            <div class="info-item"><label>Category</label><span>{{ viewDetail['categoryName'] }}</span></div>
+            <div class="info-item"><label>Date</label><span>{{ $any(viewDetail['expenseDate']) | appDate }}</span></div>
+            <div class="info-item"><label>Amount</label><span>{{ $any(viewDetail['amount']) | number:'1.2-2' }}</span></div>
+            <div class="info-item"><label>Method</label><span>{{ viewDetail['paymentMethodName'] }}</span></div>
+            <div class="info-item" *ngIf="viewDetail['description']"><label>Description</label><span>{{ viewDetail['description'] }}</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </ng-container>
+
+  <ng-container *ngIf="showForm">
+    <div class="form-panel">
+      <form [formGroup]="form" (ngSubmit)="save()" appTxnFormKeyboard [txnKeyboardActive]="!saving" (txnSave)="save()" (txnCancel)="cancel()">
+        <div class="txn-form-bar">
+          <div class="txn-head">
+            <div class="txn-head__left">
+              <span class="txn-head__type">Expense</span>
+            </div>
+            <button type="button" class="btn btn-primary btn-sm txn-head__list-btn" (click)="openList()" [disabled]="saving">Expenses List</button>
+          </div>
+        </div>
+        <div class="row g-2">
+          <div class="col-md-6">
+            <label class="form-label">Category *</label>
+            <app-searchable-select formControlName="expenseCategoryId" appTxnAutofocus
+              [items]="categorySelectOptions" placeholder="Choose category..." />
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Date *</label>
+            <input type="date" class="form-control" formControlName="expenseDate" />
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Amount *</label>
+            <input type="number" class="form-control" formControlName="amount" step="0.01" min="0.01" />
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Paid From</label>
+            <app-searchable-select formControlName="paymentMethodId"
+              [items]="paymentMethodOptions" />
+          </div>
+          <div class="col-md-8">
+            <label class="form-label">Description</label>
+            <input class="form-control" formControlName="description" placeholder="e.g. Shop rent for June" />
+          </div>
+        </div>
+        <div class="form-footer">
+          <button class="btn btn-success btn-sm" type="submit" [disabled]="saving" title="Save (Ctrl+S)">{{ saving ? 'Saving...' : 'Save Expense' }}</button>
+          <button class="btn btn-secondary btn-sm" type="button" (click)="cancel()" [disabled]="saving" title="Back to list (Esc)">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </ng-container>
+</div>

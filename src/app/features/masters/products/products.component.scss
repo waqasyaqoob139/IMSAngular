@@ -1,0 +1,83 @@
+.lookup-field {
+  display: flex;
+  gap: 0.35rem;
+  align-items: stretch;
+
+  .form-select,
+  app-searchable-select {
+    min-width: 0;
+    flex: 1;
+  }
+}
+
+.lookup-field__add {
+  flex-shrink: 0;
+  min-width: 2rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.quick-add {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.35rem;
+  align-items: center;
+
+  .form-control {
+    flex: 1 1 8rem;
+    min-width: 0;
+  }
+}
+
+.quick-add__short {
+  flex: 0 1 5.5rem !important;
+  max-width: 6rem;
+}
+
+.page-header-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.bulk-upload {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin-bottom: 1rem;
+  padding: 0.75rem;
+  border: 1px solid var(--bs-border-color, #dee2e6);
+  border-radius: 0.375rem;
+  background: var(--bs-light, #f8f9fa);
+}
+
+.bulk-upload__hint {
+  flex: 1 1 100%;
+  margin-bottom: 0;
+}
+
+.bulk-upload__input {
+  display: none;
+}
+
+.bulk-upload__name {
+  flex: 1 1 10rem;
+  min-width: 0;
+  font-size: 0.875rem;
+  color: #667085;
+}
+
+.bulk-import-result {
+  margin-bottom: 1rem;
+}
+
+.bulk-import-preview__list {
+  margin: 0;
+  padding-left: 1.25rem;
+  max-height: 12rem;
+  overflow-y: auto;
+  columns: 2;
+  column-gap: 2rem;
+}

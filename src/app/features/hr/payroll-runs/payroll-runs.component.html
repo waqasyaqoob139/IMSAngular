@@ -1,0 +1,224 @@
+<div class="page-shell">
+  <div *ngIf="message" class="alert alert-success">{{ message }}</div>
+  <div *ngIf="errorMessage" class="alert alert-danger">{{ errorMessage }}</div>
+
+  <ng-container *ngIf="!viewId && !showCreate">
+    <div class="page-header">
+      <div>
+        <h4>Payroll Runs</h4>
+        <p class="hint-text mb-0">Calculate salaries for a period, finalize, then pay employees</p>
+      </div>
+      <button class="btn btn-primary" (click)="openCreate()" [disabled]="loading">+ New Payroll</button>
+    </div>
+
+    <div class="content-panel">
+      <div class="toolbar">
+        <input class="form-control" placeholder="Search run number..." [(ngModel)]="search" (keyup.enter)="load()" />
+        <button class="btn btn-outline-secondary" (click)="load()" [disabled]="loading">Search</button>
+      </div>
+
+      <div *ngIf="loading" class="loading-row">Loading...</div>
+
+      <div class="hr-empty" *ngIf="!loading && runs.length === 0">
+        <h6>No payroll runs yet</h6>
+        <p>Create a payroll run for the current month to pay your staff.</p>
+        <button class="btn btn-primary" (click)="openCreate()">+ New Payroll</button>
+      </div>
+
+      <div class="data-table-wrap" *ngIf="!loading && runs.length > 0">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Run #</th>
+              <th>Period</th>
+              <th>Paid</th>
+              <th class="hr-money">Total net</th>
+              <th>Status</th>
+              <th class="col-actions">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let run of runs">
+              <td><strong>{{ run.runNumber }}</strong></td>
+              <td>{{ periodLabel(run.periodStart, run.periodEnd) }}</td>
+              <td>{{ run.paidCount }} / {{ run.employeeCount }}</td>
+              <td class="hr-money"><strong>{{ run.totalNet | number:'1.2-2' }}</strong></td>
+              <td>
+                <span class="hr-status" [ngClass]="statusClass(run.status)">{{ run.statusName }}</span>
+              </td>
+              <td class="col-actions">
+                <button class="btn btn-sm btn-outline-primary me-1" (click)="openDetail(run.payrollRunId)">Open</button>
+                <button class="btn btn-sm btn-outline-danger" *ngIf="run.status === 1" (click)="removeRun(run)">Delete</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </ng-container>
+
+  <ng-container *ngIf="showCreate">
+    <div class="page-header">
+      <div class="page-header-left">
+        <button type="button" class="btn-back" (click)="cancelCreate()" [disabled]="saving">← Back</button>
+        <h4>New Payroll</h4>
+      </div>
+    </div>
+    <div class="form-panel">
+      <form [formGroup]="headerForm" (ngSubmit)="createRun()">
+        <div class="row g-3">
+          <div class="col-md-4">
+            <label class="form-label">Month *</label>
+            <input type="month" class="form-control" formControlName="month" (change)="onCreateMonthChange()" />
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Pay through *</label>
+            <input type="date" class="form-control" formControlName="payThrough" />
+            <small class="text-muted">Last day included in this payroll</small>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Remarks</label>
+            <input class="form-control" formControlName="remarks" placeholder="Optional" />
+          </div>
+          <div class="col-md-12">
+            <div class="hr-period-preview">
+              Period: <strong>{{ createPeriodPreview }}</strong>
+              <span class="d-block mt-1">Monthly salaries are pro-rated. Daily staff are paid rate × days.</span>
+            </div>
+          </div>
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-success" type="submit" [disabled]="saving">{{ saving ? 'Creating...' : 'Create Payroll' }}</button>
+        </div>
+      </form>
+    </div>
+  </ng-container>
+
+  <ng-container *ngIf="viewId && detail">
+    <div class="page-header">
+      <div class="page-header-left">
+        <button type="button" class="btn-back" (click)="closeDetail()">← Back</button>
+        <div>
+          <h4>{{ detail.runNumber }}</h4>
+          <p class="hint-text mb-0">
+            {{ periodLabel(detail.periodStart, detail.periodEnd) }}
+            · {{ periodDayCount }} days
+            · <span class="hr-status" [ngClass]="statusClass(detail.status)">{{ detail.statusName }}</span>
+          </p>
+        </div>
+      </div>
+      <div class="page-header-actions">
+        <ng-container *ngIf="isDraft">
+          <button class="btn btn-outline-primary" (click)="saveDraft()" [disabled]="saving">Save</button>
+          <button class="btn btn-success" (click)="finalizeRun()" [disabled]="saving">Finalize</button>
+        </ng-container>
+      </div>
+    </div>
+
+    <div class="hr-banner" *ngIf="isDraft">
+      <strong>Draft</strong> — Adjust pay-through date or deductions if needed, then click <strong>Finalize</strong>. Deductions are saved when you finalize.
+    </div>
+
+    <div class="hr-progress" *ngIf="isFinalized && detail.lines.length > 0">
+      <div class="meta">
+        <span>Payment progress</span>
+        <span>{{ paidProgress }}% paid</span>
+      </div>
+      <div class="bar-wrap">
+        <div class="bar-fill" [style.width.%]="paidProgress"></div>
+      </div>
+    </div>
+
+    <div class="hr-pay-bar" *ngIf="isFinalized && unpaidCount > 0">
+      <div class="info">
+        <strong>{{ unpaidCount }} employee(s) unpaid</strong>
+        <span>Total {{ unpaidTotal | number:'1.2-2' }}</span>
+      </div>
+      <div class="actions">
+        <select class="form-select form-select-sm" [(ngModel)]="paymentMethodId">
+          <option [ngValue]="1">Cash</option>
+          <option [ngValue]="3">Bank</option>
+        </select>
+        <button class="btn btn-success btn-sm" (click)="payAll()" [disabled]="payingAll">
+          {{ payingAll ? 'Paying...' : 'Pay All' }}
+        </button>
+      </div>
+    </div>
+
+    <div class="content-panel mb-3" *ngIf="isDraft">
+      <div class="row g-2 align-items-end">
+        <div class="col-md-4">
+          <label class="form-label">Pay through</label>
+          <input type="date" class="form-control" [(ngModel)]="detail.periodEnd" [min]="detail.periodStart" (ngModelChange)="onPeriodEndChange()" />
+        </div>
+        <div class="col-md-8">
+          <p class="text-muted small mb-0">Salaries recalculate for <strong>{{ periodDayCount }} days</strong> when you change this date.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-panel">
+      <div class="payroll-summary row g-2 mb-3">
+        <div class="col-md-4"><div class="summary-card"><span>Gross</span><strong>{{ detail.totalGross | number:'1.2-2' }}</strong></div></div>
+        <div class="col-md-4"><div class="summary-card"><span>Deductions</span><strong>{{ detail.totalDeductions | number:'1.2-2' }}</strong></div></div>
+        <div class="col-md-4"><div class="summary-card summary-card--accent"><span>Net payable</span><strong>{{ detail.totalNet | number:'1.2-2' }}</strong></div></div>
+      </div>
+
+      <div class="toolbar mb-2" *ngIf="detail.lines.length > 5">
+        <input class="form-control form-control-sm" style="max-width: 16rem" placeholder="Find employee..." [(ngModel)]="lineSearch" />
+      </div>
+
+      <div class="data-table-wrap">
+        <table class="data-table payroll-lines-table">
+          <thead>
+            <tr>
+              <th>Employee</th>
+              <th>Type</th>
+              <th class="hr-money">Days</th>
+              <th class="hr-money">Gross</th>
+              <th class="hr-money">Deduction</th>
+              <th class="hr-money">Net</th>
+              <th>Status</th>
+              <th class="col-actions">Pay</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngIf="filteredLines.length === 0" class="empty-row"><td colspan="8">No employees match your search.</td></tr>
+            <tr *ngFor="let line of filteredLines">
+              <td>
+                <strong>{{ line.fullName }}</strong>
+                <div class="text-muted small">{{ line.employeeCode }}</div>
+              </td>
+              <td>
+                <span class="hr-type-tag" [class.hr-type-tag--daily]="line.salaryTypeId === 2">{{ line.salaryTypeName }}</span>
+              </td>
+              <td class="hr-money">
+                <input *ngIf="isDraft && line.salaryTypeId === 2" type="number" class="form-control form-control-sm days-input"
+                  [(ngModel)]="line.daysWorked" min="0" step="0.5" (ngModelChange)="onDaysChange(line)" />
+                <span *ngIf="!isDraft || line.salaryTypeId !== 2">{{ line.salaryTypeId === 2 ? line.daysWorked : periodDayCount }}</span>
+              </td>
+              <td class="hr-money">{{ line.grossAmount | number:'1.2-2' }}</td>
+              <td class="hr-money">
+                <input *ngIf="isDraft" type="number" class="form-control form-control-sm deduction-input"
+                  [(ngModel)]="line.deductionAmount" min="0" step="0.01" (ngModelChange)="onDeductionChange(line)" />
+                <span *ngIf="!isDraft">{{ line.deductionAmount | number:'1.2-2' }}</span>
+              </td>
+              <td class="hr-money"><strong>{{ line.netAmount | number:'1.2-2' }}</strong></td>
+              <td>
+                <span class="hr-status" [class.hr-status--paid]="line.isPaid" [class.hr-status--unpaid]="!line.isPaid">
+                  {{ line.isPaid ? 'Paid' : 'Unpaid' }}
+                </span>
+              </td>
+              <td class="col-actions">
+                <button class="btn btn-sm btn-success" *ngIf="isFinalized && !line.isPaid && line.netAmount > 0"
+                  (click)="payLine(line)" [disabled]="payingLineId === line.payrollRunLineId">
+                  {{ payingLineId === line.payrollRunLineId ? '...' : 'Pay' }}
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </ng-container>
+</div>

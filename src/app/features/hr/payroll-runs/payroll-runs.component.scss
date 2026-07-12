@@ -1,0 +1,30 @@
+.payroll-summary .summary-card {
+  background: #fff;
+  border: 1px solid var(--ims-border-strong);
+  border-radius: var(--ims-radius);
+  padding: 0.75rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+
+  span {
+    font-size: 0.75rem;
+    color: var(--ims-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+
+  strong {
+    font-size: 1.125rem;
+  }
+}
+
+.summary-card--accent {
+  background: var(--ims-primary-soft);
+  border-color: var(--ims-primary-muted);
+}
+
+.payroll-lines-table .days-input,
+.payroll-lines-table .deduction-input {
+  max-width: 6rem;
+}

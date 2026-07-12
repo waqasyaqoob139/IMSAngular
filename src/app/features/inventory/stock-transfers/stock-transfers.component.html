@@ -1,0 +1,91 @@
+<div class="page-shell" appPageNewShortcut [pageNewShortcutActive]="!saving" (pageNewShortcut)="openCreate()">
+  <div *ngIf="message" class="alert alert-success">{{ message }}</div>
+  <div *ngIf="errorMessage" class="alert alert-danger">{{ errorMessage }}</div>
+
+  <ng-container *ngIf="!showForm">
+    <div class="page-header">
+      <div>
+        <h4>Stock Transfers</h4>
+        <p class="hint-text mb-0">Move stock between locations</p>
+      </div>
+      <button class="btn btn-primary" (click)="openCreate()">+ New Transfer</button>
+    </div>
+    <div class="content-panel">
+      <div *ngIf="loading" class="loading-row">Loading...</div>
+      <div class="data-table-wrap" *ngIf="!loading">
+        <table class="data-table">
+          <thead>
+            <tr><th>Number</th><th>Date</th><th>From</th><th>To</th><th>Lines</th></tr>
+          </thead>
+          <tbody>
+            <tr *ngIf="items.length === 0" class="empty-row"><td colspan="5">No transfers yet.</td></tr>
+            <tr *ngFor="let t of items">
+              <td><strong>{{ t.transferNumber }}</strong></td>
+              <td>{{ t.transferDate | appDate }}</td>
+              <td>{{ t.fromLocationName }}</td>
+              <td>{{ t.toLocationName }}</td>
+              <td>{{ t.lineCount }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </ng-container>
+
+  <ng-container *ngIf="showForm">
+    <div class="page-header">
+      <div class="page-header-left">
+        <button type="button" class="btn-back" (click)="cancel()" [disabled]="saving">← Back</button>
+        <h4>New Stock Transfer</h4>
+      </div>
+    </div>
+    <div class="form-panel">
+      <form [formGroup]="form" (ngSubmit)="save()" appSaveShortcut [saveShortcutActive]="!saving" (saveShortcut)="save()">
+        <div class="row g-2 mb-3">
+          <div class="col-md-3">
+            <label class="form-label">Date *</label>
+            <input type="date" class="form-control" formControlName="transferDate" />
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">From *</label>
+            <app-searchable-select formControlName="fromLocationId"
+              [items]="locationSelectOptions" placeholder="Choose..." />
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">To *</label>
+            <app-searchable-select formControlName="toLocationId"
+              [items]="locationSelectOptions" placeholder="Choose..." />
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Reason</label>
+            <input class="form-control" formControlName="reason" />
+          </div>
+        </div>
+
+        <div class="data-table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr><th>Product</th><th>Quantity</th><th></th></tr>
+            </thead>
+            <tbody formArrayName="lines">
+              <tr *ngFor="let line of lines.controls; let i = index" [formGroupName]="i">
+                <td>
+                  <app-searchable-select formControlName="productId" [small]="true" [wide]="true"
+                    [items]="productSelectOptions" placeholder="Select..." />
+                </td>
+                <td><input type="number" class="form-control form-control-sm" formControlName="quantity" step="0.01" min="0.01" /></td>
+                <td><button type="button" class="btn btn-sm btn-outline-danger" (click)="removeLine(i)">×</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <button type="button" class="btn btn-sm btn-outline-primary mt-2" (click)="addLine()">+ Add Line</button>
+
+        <div class="form-footer">
+          <button class="btn btn-success" type="submit" [disabled]="saving">{{ saving ? 'Saving...' : 'Save Transfer' }}</button>
+          <button class="btn btn-secondary" type="button" (click)="cancel()" [disabled]="saving">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </ng-container>
+</div>

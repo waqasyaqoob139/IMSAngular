@@ -1,0 +1,78 @@
+<div class="page-shell" appPageNewShortcut [pageNewShortcutActive]="!saving" (pageNewShortcut)="openCreate()">
+  <div *ngIf="message" class="alert alert-success">{{ message }}</div>
+  <div *ngIf="errorMessage" class="alert alert-danger">{{ errorMessage }}</div>
+
+  <ng-container *ngIf="!showForm">
+    <div class="page-header">
+      <h4>Units</h4>
+      <button class="btn btn-primary" (click)="openCreate()" [disabled]="loading">+ Add Unit</button>
+    </div>
+
+    <div class="content-panel">
+      <div class="toolbar">
+        <input class="form-control" placeholder="Search..." [(ngModel)]="search" (keyup.enter)="load()" />
+        <button class="btn btn-outline-secondary" (click)="load()" [disabled]="loading">Search</button>
+      </div>
+
+      <div *ngIf="loading" class="loading-row">Loading...</div>
+
+      <div class="data-table-wrap" *ngIf="!loading">
+        <table class="data-table">
+          <thead>
+            <tr><th>Name</th><th>Short</th><th>Status</th><th class="col-actions">Actions</th></tr>
+          </thead>
+          <tbody>
+            <tr *ngIf="units.length === 0" class="empty-row"><td colspan="4">No units found.</td></tr>
+            <tr *ngFor="let unit of units">
+              <td>{{ unit.unitName }}</td>
+              <td>{{ unit.shortName }}</td>
+              <td>
+                <span class="badge" [class.text-bg-success]="unit.isActive" [class.text-bg-secondary]="!unit.isActive">
+                  {{ unit.isActive ? 'Active' : 'Inactive' }}
+                </span>
+              </td>
+              <td class="col-actions">
+                <button class="btn btn-sm btn-outline-primary me-1" (click)="openEdit(unit)">Edit</button>
+                <button class="btn btn-sm btn-outline-danger" (click)="remove(unit)">Delete</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </ng-container>
+
+  <ng-container *ngIf="showForm">
+    <div class="page-header">
+      <div class="page-header-left">
+        <button type="button" class="btn-back" (click)="cancel()" [disabled]="saving">← Back</button>
+        <h4>{{ editingId ? 'Edit Unit' : 'Add Unit' }}</h4>
+      </div>
+    </div>
+
+    <div class="form-panel">
+      <form [formGroup]="form" (ngSubmit)="save()" appSaveShortcut [saveShortcutActive]="!saving" (saveShortcut)="save()">
+        <div class="row g-2">
+          <div class="col-md-4">
+            <label class="form-label">Unit Name *</label>
+            <input class="form-control" formControlName="unitName" />
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Short Name *</label>
+            <input class="form-control" formControlName="shortName" />
+          </div>
+          <div class="col-md-3 d-flex align-items-end pb-1">
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" formControlName="isActive" id="unitActive" />
+              <label class="form-check-label" for="unitActive">Active</label>
+            </div>
+          </div>
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-success" type="submit" [disabled]="saving">{{ saving ? 'Saving...' : 'Save' }}</button>
+          <button class="btn btn-secondary" type="button" (click)="cancel()" [disabled]="saving">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </ng-container>
+</div>

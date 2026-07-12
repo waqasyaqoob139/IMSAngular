@@ -1,0 +1,11 @@
+<div class="page-shell">
+  <div class="content-panel no-access-panel">
+    <h4>No module access</h4>
+    <p>
+      You are signed in as <strong>{{ auth.currentUser()?.fullName }}</strong>, but your role
+      does not have permission to open any module.
+    </p>
+    <p class="text-muted">Ask an administrator to assign permissions to your role, then sign in again.</p>
+    <button type="button" class="btn btn-secondary" (click)="auth.logout()">Sign out</button>
+  </div>
+</div>

@@ -1,0 +1,489 @@
+<div class="page-shell" appPageNewShortcut [pageNewShortcutActive]="!saving && !showSaveConfirm" (pageNewShortcut)="startNew()">
+  <div *ngIf="message" class="alert alert-success">{{ message }}</div>
+  <div *ngIf="errorMessage" class="alert alert-danger">{{ errorMessage }}</div>
+
+  <!-- List -->
+  <ng-container *ngIf="!showForm && !viewId">
+    <div class="content-panel">
+      <div class="toolbar">
+        <span class="toolbar-title">Sales / POS</span>
+        <input class="form-control txn-list-search" appTxnAutofocus placeholder="Search by invoice # or customer..." [(ngModel)]="search" (keyup.enter)="load()" />
+        <button class="btn btn-outline-secondary btn-sm" (click)="load()" [disabled]="loading">Search</button>
+        <button class="btn btn-outline-secondary btn-sm" type="button" (click)="exportList()" [disabled]="!sales.length">Export</button>
+        <div class="toolbar-actions">
+          <button class="btn btn-primary btn-sm" (click)="openCreate()">+ New Sale</button>
+        </div>
+      </div>
+
+      <div *ngIf="loading" class="loading-row">Loading sales...</div>
+
+      <div class="data-table-wrap" *ngIf="!loading">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Invoice #</th>
+              <th>Date</th>
+              <th>Customer</th>
+              <th>Total</th>
+              <th>Paid</th>
+              <th>Due</th>
+              <th>Profit</th>
+              <th>Status</th>
+              <th class="col-actions">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngIf="sales.length === 0" class="empty-row">
+              <td colspan="9">No sales yet. Click <strong>+ New Sale</strong> to create one.</td>
+            </tr>
+            <tr *ngFor="let s of sales">
+              <td><strong>{{ s.saleNumber }}</strong></td>
+              <td>{{ s.saleDate | appDate }}</td>
+              <td>{{ customerDisplay(s.customerName) }}</td>
+              <td>{{ s.grandTotal | number:'1.2-2' }}</td>
+              <td>{{ s.paidAmount | number:'1.2-2' }}</td>
+              <td>{{ s.balanceAmount | number:'1.2-2' }}</td>
+              <td class="text-success">{{ s.totalProfitAmount | number:'1.2-2' }}</td>
+              <td>
+                <span class="badge"
+                  [class.text-bg-success]="salePaymentStatus(s) === 1"
+                  [class.text-bg-warning]="salePaymentStatus(s) === 2"
+                  [class.text-bg-secondary]="salePaymentStatus(s) === 0">
+                  {{ paymentStatusLabel(salePaymentStatus(s)) }}
+                </span>
+              </td>
+              <td class="col-actions">
+                <button class="btn btn-sm btn-outline-primary" (click)="openView(s)">View</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </ng-container>
+
+  <!-- View -->
+  <ng-container *ngIf="viewId">
+    <div class="content-panel">
+      <div class="toolbar">
+        <button type="button" class="txn-list-link" (click)="closeView()">← Back</button>
+        <span class="toolbar-title">Sale {{ viewDetail?.['saleNumber'] || '...' }}</span>
+        <div class="toolbar-actions">
+          <button type="button" class="btn btn-outline-secondary btn-sm" (click)="printView()" *ngIf="viewDetail">Print</button>
+        </div>
+      </div>
+
+    <div *ngIf="loadingDetail" class="loading-row">Loading details...</div>
+
+    <div class="section-card invoice-view" *ngIf="!loadingDetail && viewDetail">
+      <div class="section-card__body">
+        <div class="info-grid">
+          <div class="info-item"><label>Customer</label><span>{{ customerDisplay($any(viewDetail['customerName'])) }}</span></div>
+          <div class="info-item"><label>Date</label><span>{{ $any(viewDetail['saleDate']) | appDate:'datetime' }}</span></div>
+          <div class="info-item"><label>Location</label><span>{{ viewDetail['locationName'] }}</span></div>
+          <div class="info-item"><label>Subtotal</label><span>{{ $any(viewDetail['subTotal']) | number:'1.2-2' }}</span></div>
+          <div class="info-item" *ngIf="$any(viewDetail['discountAmount']) > 0"><label>Discount</label><span class="text-danger">−{{ $any(viewDetail['discountAmount']) | number:'1.2-2' }}</span></div>
+          <div class="info-item" *ngIf="$any(viewDetail['taxAmount']) > 0"><label>Tax</label><span>{{ $any(viewDetail['taxAmount']) | number:'1.2-2' }}</span></div>
+          <div class="info-item"><label>Grand Total</label><span>{{ $any(viewDetail['grandTotal']) | number:'1.2-2' }}</span></div>
+          <div class="info-item" *ngIf="$any(viewDetail['cashReceivedAmount']) > 0">
+            <label>Received</label><span>{{ $any(viewDetail['cashReceivedAmount']) | number:'1.2-2' }}</span>
+          </div>
+          <div class="info-item" *ngIf="$any(viewDetail['changeAmount']) > 0">
+            <label>Return</label><span class="text-primary">{{ $any(viewDetail['changeAmount']) | number:'1.2-2' }}</span>
+          </div>
+          <div class="info-item"><label>Profit</label><span class="text-success">{{ $any(viewDetail['totalProfitAmount']) | number:'1.2-2' }}</span></div>
+          <div class="info-item"><label>Balance Due</label><span>{{ $any(viewDetail['balanceAmount']) | number:'1.2-2' }}</span></div>
+        </div>
+
+        <div class="data-table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr><th>Product</th><th>SKU</th><th>Qty</th><th>Price</th><th>Total</th><th>Profit</th></tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let line of $any(viewDetail['lines'])">
+                <td>{{ line.productName }}</td>
+                <td>{{ line.sku }}</td>
+                <td>{{ line.quantity }}</td>
+                <td>{{ line.unitPrice | number:'1.2-2' }}</td>
+                <td>{{ line.lineTotal | number:'1.2-2' }}</td>
+                <td class="text-success">{{ line.lineProfit | number:'1.2-2' }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div *ngIf="$any(viewDetail['payments'])?.length" class="mt-2">
+          <strong class="small">Payments received</strong>
+          <div class="data-table-wrap mt-1">
+            <table class="data-table">
+              <thead><tr><th>Method</th><th>Amount</th></tr></thead>
+              <tbody>
+                <tr *ngFor="let pay of $any(viewDetail['payments'])">
+                  <td>{{ pay.paymentMethodName }}</td>
+                  <td>{{ pay.amount | number:'1.2-2' }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+    </div>
+  </ng-container>
+
+  <!-- New sale form -->
+  <ng-container *ngIf="showForm">
+    <form [formGroup]="form" (ngSubmit)="requestSave($event)" appTxnFormKeyboard
+      [txnKeyboardActive]="!saving && !showSaveConfirm"
+      [txnProductShortKeysEnabled]="enableProductShortKeys"
+      [txnProductShortKeyMap]="productShortKeyMap"
+      (txnProductShortKey)="onProductShortKey($event)"
+      (txnSave)="requestSave()" (txnCancel)="cancel()">
+      <app-txn-save-confirm
+        [open]="showSaveConfirm"
+        title="Save this sale?"
+        [itemCount]="filledLineIndices.length"
+        [grandTotal]="grandTotal"
+        [partyLabel]="saveConfirmPartyLabel"
+        [paymentSummary]="saveConfirmPaymentSummary"
+        [saving]="saving"
+        [printChoice]="true"
+        saveLabel="Sale"
+        saveWithPrintLabel="Sale & Print"
+        (confirmed)="confirmSave($event)"
+        (cancelled)="cancelSaveConfirm()">
+      </app-txn-save-confirm>
+      <div class="sale-layout">
+        <div class="pos-main-col">
+          <div class="section-card section-card--invoice">
+            <div class="section-card__head">
+              <div class="txn-head">
+                <div class="txn-head__left">
+                  <span class="txn-head__type">Sale</span>
+                  <span class="pos-draft-chip" *ngIf="oppositeDraftHint">{{ oppositeDraftHint }}</span>
+                </div>
+                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="openList()" [disabled]="saving">Sales List</button>
+              </div>
+            </div>
+            <div class="section-card__body invoice-fields-row">
+              <div class="row g-2 align-items-end">
+                <div class="col-6 col-md-3 col-lg-3">
+                  <label class="form-label">Customer</label>
+                  <app-searchable-select formControlName="customerId" txnFocus="customer"
+                    [items]="customerSelectOptions" [nullable]="true" nullLabel="Walk-in"
+                    [allowCreate]="true" [pendingText]="pendingCustomerName"
+                    (pendingTextChange)="pendingCustomerName = $event"
+                    (openChange)="onHeaderSelectOpenChange($event)"
+                    [disabled]="loadingLookups"                     (keydown.enter)="onQuickFieldEnter($event, 'customer')" />
+                </div>
+                <div class="col-6 col-md-2 col-lg-2">
+                  <label class="form-label">Sale Date <span class="text-danger">*</span></label>
+                  <input type="date" class="form-control" formControlName="saleDate" data-txn-focus="saleDate"
+                    (keydown.enter)="onQuickFieldEnter($event, 'saleDate')" />
+                </div>
+                <div class="col-6 col-md-3 col-lg-3">
+                  <label class="form-label">Location <span class="text-danger">*</span></label>
+                  <app-searchable-select formControlName="locationId" txnFocus="location"
+                    [items]="locationSelectOptions" placeholder="Choose..."
+                    (openChange)="onHeaderSelectOpenChange($event)"
+                    [disabled]="loadingLookups" (keydown.enter)="onQuickFieldEnter($event, 'location')" />
+                </div>
+                <div class="col-6 col-md-4 col-lg-4">
+                  <label class="form-label">Notes</label>
+                  <input class="form-control" formControlName="remarks" data-txn-focus="remarks" placeholder="Optional"
+                    (keydown.enter)="onQuickFieldEnter($event, 'remarks')" />
+                </div>
+                <div class="col-12 col-md-6 col-lg-4">
+                  <label class="form-label">Barcode</label>
+                  <input class="form-control" placeholder="Scan or type barcode, Enter to add"
+                    [(ngModel)]="barcodeInput" [ngModelOptions]="{standalone: true}" (keyup.enter)="onBarcodeEnter()" />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="section-card pos-workspace">
+            <div class="section-card__body">
+              <app-txn-product-browse
+                [open]="productBrowseOpen"
+                [products]="browseProducts"
+                priceLabel="Price"
+                (closed)="closeProductBrowse()"
+                (selected)="onBrowseProductSelected($event)">
+              </app-txn-product-browse>
+
+              <div class="lines-meta" *ngIf="filledLineIndices.length">
+                <span>{{ filledLineIndices.length }} item(s)</span>
+                <strong>{{ subTotal | number:'1.2-2' }}</strong>
+              </div>
+
+              <div class="data-table-wrap lines-wrap" formArrayName="lines">
+                <table class="data-table lines-grid">
+                  <thead>
+                    <tr>
+                      <th class="col-num">#</th>
+                      <th class="col-product">Product</th>
+                      <th class="col-qty">Qty</th>
+                      <th class="col-price">Price</th>
+                      <th class="col-total">Total</th>
+                      <th class="col-actions"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr *ngFor="let i of displayLineIndices; let n = index" [formGroupName]="i"
+                      [class.pos-line--active]="activeLineIndex === i">
+                      <td class="col-num text-muted">{{ n + 1 }}</td>
+                      <td class="line-product-cell" [class.line-product-cell--search]="isTrailingEmptyRow(i)">
+                        <ng-container *ngIf="isTrailingEmptyRow(i); else filledProductCell">
+                          <div class="line-product-picker product-picker" [class.product-picker--open]="showProductPicker">
+                            <div class="line-product-search-row">
+                              <input
+                                #lineProductSearchInput
+                                id="sale-line-product-search"
+                                class="form-control line-product-search-input"
+                                data-txn-focus="product-search"
+                                placeholder="Search product — Enter to add"
+                                [(ngModel)]="productSearch"
+                                [ngModelOptions]="{standalone: true}"
+                                (input)="onProductSearchInput()"
+                                (focus)="onLineProductSearchFocus()"
+                                (keydown)="onProductSearchKeydown($event)"
+                                (keydown.enter)="onProductSearchEnter($event)"
+                                (keydown.shift.tab)="onProductSearchShiftTab($event)"
+                                autocomplete="off"
+                                role="combobox"
+                                [attr.aria-expanded]="showProductPicker"
+                                aria-controls="sale-line-product-picker-list" />
+                              <button type="button" class="btn btn-outline-secondary btn-sm line-product-browse"
+                                tabindex="-1" (click)="openProductBrowse()"
+                                title="Browse products" aria-label="Browse products">
+                                <svg class="line-product-browse__icon" viewBox="0 0 24 24" aria-hidden="true">
+                                  <rect x="3" y="3" width="7" height="7" rx="1" fill="none" stroke="currentColor" stroke-width="2"/>
+                                  <rect x="14" y="3" width="7" height="7" rx="1" fill="none" stroke="currentColor" stroke-width="2"/>
+                                  <rect x="3" y="14" width="7" height="7" rx="1" fill="none" stroke="currentColor" stroke-width="2"/>
+                                  <rect x="14" y="14" width="7" height="7" rx="1" fill="none" stroke="currentColor" stroke-width="2"/>
+                                </svg>
+                              </button>
+                            </div>
+                            <ul
+                              id="sale-line-product-picker-list"
+                              class="product-picker__list line-product-picker__list"
+                              [ngStyle]="lineProductPickerStyle"
+                              *ngIf="showProductPicker"
+                              role="listbox">
+                              <li
+                                *ngFor="let p of pickerProducts; let pi = index"
+                                class="product-picker__item"
+                                [class.product-picker__item--active]="pi === highlightedProductIndex"
+                                role="option"
+                                [attr.aria-selected]="pi === highlightedProductIndex"
+                                (mousedown)="$event.preventDefault(); addProductFromPicker(p)">
+                                <span class="product-picker__name">{{ p.productName }}</span>
+                                <span class="product-picker__meta">{{ p.sku }} · Stock {{ p.currentStock }} · {{ p.sellingPrice | number:'1.2-2' }}</span>
+                              </li>
+                            </ul>
+                          </div>
+                        </ng-container>
+                        <ng-template #filledProductCell>
+                          <span class="line-product-name">{{ productLabel(lines.at(i).get('productId')?.value) }}</span>
+                          <span class="line-product-sku" *ngIf="productSku(lines.at(i).get('productId')?.value)">{{ productSku(lines.at(i).get('productId')?.value) }}</span>
+                        </ng-template>
+                      </td>
+                      <ng-container *ngIf="!isTrailingEmptyRow(i); else trailingQtyPrice">
+                        <td class="col-qty">
+                          <div class="line-qty-cell">
+                            <input type="number" class="form-control form-control-sm" formControlName="quantity"
+                                   [attr.data-line-index]="i" data-line-field="quantity"
+                                   step="1" min="1" (input)="onQuantityChanged(i)" (focus)="onLineFocus(i)"
+                                   (keydown)="onLineFieldKeydown($event, i)"
+                                   (keydown.enter)="$event.preventDefault(); onLineEnter(i, 'quantity')"
+                                   (keydown.tab)="onLineTab(i, 'quantity', $event)" />
+                            <span class="line-avl">Avl {{ productStock(lines.at(i).get('productId')?.value) | number:'1.0-2' }}</span>
+                          </div>
+                        </td>
+                        <td class="col-price">
+                          <input type="number" class="form-control form-control-sm" formControlName="unitPrice"
+                                 [attr.data-line-index]="i" data-line-field="unitPrice"
+                                 step="0.01" min="0" (focus)="onLineFocus(i)"
+                                 (keydown)="onLineFieldKeydown($event, i)"
+                                 (keydown.enter)="$event.preventDefault(); onLineEnter(i, 'unitPrice')"
+                                 (keydown.tab)="onLineTab(i, 'unitPrice', $event)" />
+                        </td>
+                        <td class="col-total line-total-cell">{{ lineTotal(lines.at(i).value) | number:'1.2-2' }}</td>
+                        <td class="col-actions">
+                          <button type="button" class="btn btn-sm btn-link text-danger p-0 line-remove" tabindex="-1"
+                                  (click)="removeLine(i)" [disabled]="!canRemoveLine(i)" title="Remove">×</button>
+                        </td>
+                      </ng-container>
+                      <ng-template #trailingQtyPrice>
+                        <td class="col-qty line-placeholder-cell">—</td>
+                        <td class="col-price line-placeholder-cell">—</td>
+                        <td class="col-total line-placeholder-cell">—</td>
+                        <td class="col-actions"></td>
+                      </ng-template>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <p class="pos-kbd-hint mb-0">Tab fields with Enter · Product → Qty → Price → next line · Delete removes row · Ctrl+S save · Alt+N new · Esc cancel</p>
+            </div>
+          </div>
+
+          <button type="button" class="advanced-toggle" (click)="showAdvanced = !showAdvanced">
+            {{ showAdvanced ? '▾ Hide' : '▸ Show' }} discount &amp; tax
+          </button>
+          <div class="section-card" *ngIf="showAdvanced">
+            <div class="section-card__body">
+              <div class="row g-2">
+                <div class="col-md-6">
+                  <label class="form-label">Invoice Discount</label>
+                  <input type="number" class="form-control" formControlName="discountAmount" step="0.01" min="0" />
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label">Tax</label>
+                  <input type="number" class="form-control" formControlName="taxAmount" step="0.01" min="0"
+                    (input)="onTaxAmountInput()" />
+                  <small class="text-muted" *ngIf="defaultTaxRate > 0">
+                    Default {{ defaultTaxRate }}% from settings —
+                    <button type="button" class="btn btn-link btn-sm p-0 align-baseline" (click)="applySuggestedTax()">recalculate</button>
+                  </small>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="summary-panel">
+          <div class="summary-panel__head">Summary</div>
+          <div class="summary-panel__body">
+            <div class="summary-row">
+              <span>Items subtotal</span>
+              <span>{{ subTotal | number:'1.2-2' }}</span>
+            </div>
+            <div class="summary-row" *ngIf="invoiceDiscount > 0">
+              <span>Discount</span>
+              <span class="text-danger">−{{ invoiceDiscount | number:'1.2-2' }}</span>
+            </div>
+            <div class="summary-row" *ngIf="invoiceTax > 0">
+              <span>Tax</span>
+              <span>{{ invoiceTax | number:'1.2-2' }}</span>
+            </div>
+            <div class="summary-row total">
+              <span>Total</span>
+              <span>{{ grandTotal | number:'1.2-2' }}</span>
+            </div>
+
+            <div class="mt-2 mb-1 fw-semibold small">Payment <span class="text-muted fw-normal">(1 Cash · 2 Credit · 3 Partial)</span></div>
+            <div class="payment-options">
+              <label class="payment-option" [class.active]="paymentMode === 'cash'">
+                <input type="radio" name="payMode" tabindex="0" data-txn-focus="payment-cash"
+                  [checked]="paymentMode === 'cash'" (change)="setPaymentMode('cash')"
+                  (keydown)="onPaymentKeydown($event, 'cash')" />
+                <div class="option-title">Cash</div>
+              </label>
+              <label class="payment-option" [class.active]="paymentMode === 'credit'">
+                <input type="radio" name="payMode" tabindex="0" data-txn-focus="payment-credit"
+                  [checked]="paymentMode === 'credit'" (change)="setPaymentMode('credit')"
+                  (keydown)="onPaymentKeydown($event, 'credit')" />
+                <div class="option-title">Credit</div>
+              </label>
+              <label class="payment-option" [class.active]="paymentMode === 'partial'">
+                <input type="radio" name="payMode" tabindex="0" data-txn-focus="payment-partial"
+                  [checked]="paymentMode === 'partial'" (change)="setPaymentMode('partial')"
+                  (keydown)="onPaymentKeydown($event, 'partial')" />
+                <div class="option-title">Partial</div>
+              </label>
+            </div>
+
+            <div *ngIf="paymentMode === 'cash'" class="mt-2">
+              <label class="form-label">Amount received</label>
+              <input type="number" class="form-control" data-txn-focus="cash-amount"
+                [(ngModel)]="partialPayAmount" [ngModelOptions]="{standalone: true}"
+                step="0.01" min="0"
+                (keydown.enter)="onCashAmountEnter($event)" />
+            </div>
+
+            <div *ngIf="paymentMode === 'partial'" class="mt-2">
+              <label class="form-label">Amount received now</label>
+              <input type="number" class="form-control" data-txn-focus="partial-amount"
+                [(ngModel)]="partialPayAmount" [ngModelOptions]="{standalone: true}"
+                step="0.01" min="0" [max]="grandTotal"
+                (keydown.enter)="onPartialPayEnter($event)" />
+            </div>
+
+            <div class="mt-2" *ngIf="paymentMode !== 'credit' && paidTotal > 0">
+              <label class="form-label">Payment method</label>
+              <app-searchable-select txnFocus="payment-method"
+                [(ngModel)]="paymentMethodId" [ngModelOptions]="{standalone: true}"
+                [items]="paymentMethodSelectOptions"
+                (keydown.enter)="onPaymentMethodEnter($event)" />
+            </div>
+
+            <div class="summary-row mt-3" *ngIf="paymentMode !== 'credit'">
+              <span>Received</span>
+              <span class="fw-semibold">{{ amountReceived | number:'1.2-2' }}</span>
+            </div>
+            <div class="summary-row" *ngIf="changeDue > 0">
+              <span>Change</span>
+              <span class="text-primary fw-semibold">{{ changeDue | number:'1.2-2' }}</span>
+            </div>
+            <div class="summary-row" *ngIf="balanceTotal > 0">
+              <span>Balance due</span>
+              <span class="fw-semibold text-danger">{{ balanceTotal | number:'1.2-2' }}</span>
+            </div>
+            <p class="hint-text">{{ paymentModeLabel }}</p>
+
+            <div class="form-footer flex-column">
+              <button class="btn btn-success w-100 pos-save-btn" type="button" data-txn-focus="save"
+                (click)="requestSave()"
+                [disabled]="saving || grandTotal <= 0" title="Save (Ctrl+S)">
+                {{ saving ? 'Saving...' : 'Save Sale' }}
+              </button>
+              <button class="btn btn-secondary w-100" type="button" (click)="cancel()" [disabled]="saving" title="Back to list (Esc)">Cancel</button>
+              <button class="btn btn-outline-danger w-100" type="button" (click)="clearAll()" [disabled]="saving">Clear All</button>
+              <p class="hint-text mb-0">Alt+P switches to Purchase and keeps this data</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </form>
+  </ng-container>
+
+  <div class="receipt-preview" *ngIf="showReceiptPreview" (keydown.escape)="closeReceiptPreview()">
+    <div class="receipt-preview__backdrop" (click)="closeReceiptPreview()"></div>
+    <div
+      class="receipt-preview__panel"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="receipt-preview-title"
+      (click)="$event.stopPropagation()">
+      <div class="receipt-preview__head">
+        <h6 id="receipt-preview-title" class="receipt-preview__title">Receipt preview</h6>
+        <p class="receipt-preview__lead">Check how the receipt will look before printing.</p>
+      </div>
+
+      <div class="receipt-preview__body">
+        <div *ngIf="receiptPreviewLoading" class="receipt-preview__loading">Loading receipt…</div>
+        <iframe
+          #receiptPreviewFrame
+          *ngIf="receiptPreviewSafeHtml"
+          class="receipt-preview__frame"
+          title="Receipt preview"
+          [srcdoc]="receiptPreviewSafeHtml">
+        </iframe>
+      </div>
+
+      <div class="receipt-preview__actions">
+        <button type="button" class="btn btn-secondary" (click)="closeReceiptPreview()">Close</button>
+        <button
+          type="button"
+          class="btn btn-primary"
+          (click)="printReceiptPreview()"
+          [disabled]="receiptPreviewLoading || !receiptPreviewSafeHtml">
+          Print
+        </button>
+      </div>
+    </div>
+  </div>
+</div>

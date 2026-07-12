@@ -1,0 +1,185 @@
+<div class="page-shell settings-page">
+  <div *ngIf="message" class="alert alert-success py-2">{{ message }}</div>
+  <div *ngIf="errorMessage" class="alert alert-danger py-2">{{ errorMessage }}</div>
+
+  <div class="page-header settings-page__header">
+    <h4>Settings</h4>
+  </div>
+
+  <div *ngIf="loading" class="loading-row">Loading settings...</div>
+
+  <div class="settings-stack" *ngIf="!loading">
+    <!-- Password -->
+    <div class="settings-card">
+      <div class="settings-card__head">My password</div>
+      <div class="settings-card__body">
+        <form [formGroup]="passwordForm" (ngSubmit)="changePassword()">
+          <div class="row g-2 align-items-end">
+            <div class="col-md-4">
+              <label class="form-label">Current *</label>
+              <input type="password" class="form-control form-control-sm" formControlName="currentPassword" autocomplete="current-password" />
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">New *</label>
+              <input type="password" class="form-control form-control-sm" formControlName="newPassword" autocomplete="new-password" />
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Confirm *</label>
+              <input type="password" class="form-control form-control-sm" formControlName="confirmPassword" autocomplete="new-password" />
+            </div>
+            <div class="col-md-2">
+              <button class="btn btn-success btn-sm w-100" type="submit" [disabled]="changingPassword">
+                {{ changingPassword ? '...' : 'Update' }}
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Company -->
+    <div class="settings-card">
+      <div class="settings-card__head">Company profile</div>
+      <div class="settings-card__body">
+        <form [formGroup]="companyForm" (ngSubmit)="saveCompany()" appSaveShortcut saveShortcutFocusOnly [saveShortcutActive]="!saving" (saveShortcut)="saveCompany()">
+          <div class="row g-2 align-items-end">
+            <div class="col-md-4">
+              <label class="form-label">Business Name *</label>
+              <input class="form-control form-control-sm" formControlName="companyName" />
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Trade Name</label>
+              <input class="form-control form-control-sm" formControlName="tradeName" />
+            </div>
+            <div class="col-md-2">
+              <label class="form-label">Phone</label>
+              <input class="form-control form-control-sm" formControlName="phone" />
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Email</label>
+              <input type="email" class="form-control form-control-sm" formControlName="email" />
+            </div>
+            <div class="col-md-5">
+              <label class="form-label">Address</label>
+              <input class="form-control form-control-sm" formControlName="address" />
+            </div>
+            <div class="col-md-2">
+              <label class="form-label">City</label>
+              <input class="form-control form-control-sm" formControlName="city" />
+            </div>
+            <div class="col-md-2">
+              <label class="form-label">Tax %</label>
+              <input type="number" class="form-control form-control-sm" formControlName="defaultTaxRate" step="0.01" min="0" />
+            </div>
+            <div class="col-md-1">
+              <label class="form-label">Cur.</label>
+              <input class="form-control form-control-sm" [value]="companyProfile?.currencyCode || 'PKR'" disabled />
+            </div>
+            <div class="col-md-2">
+              <label class="form-label">Costing</label>
+              <app-searchable-select formControlName="defaultCostingMethodId" [small]="true"
+                [items]="costingMethodOptions" [nullable]="!costingMethodLocked"
+                nullLabel="Later..." placeholder="Later..." />
+            </div>
+            <div class="col-md-12" *ngIf="costingMethodLocked">
+              <small class="text-warning">Costing locked after save.</small>
+            </div>
+            <div class="col-md-12 d-flex justify-content-end">
+              <button class="btn btn-success btn-sm" type="submit" [disabled]="saving">
+                {{ saving ? 'Saving...' : 'Save Company' }}
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="settings-row" appSaveShortcut saveShortcutFocusOnly [saveShortcutActive]="!saving" (saveShortcut)="saveAppSettings()">
+      <!-- Receipt -->
+      <div class="settings-card settings-card--half">
+        <div class="settings-card__head">Receipt printer</div>
+        <div class="settings-card__body">
+          <p class="text-muted small mb-2">
+            Run the API on this Windows PC. Choose the exact printer name below — receipts print directly with no browser dialog.
+          </p>
+          <div class="row g-2">
+            <div class="col-md-6" *ngFor="let s of printSettings">
+              <label class="form-label">{{ settingLabel(s.settingKey) }}</label>
+              <ng-container *ngIf="isPrinterNameSetting(s.settingKey); else printField">
+                <input class="form-control form-control-sm" list="printerList" [(ngModel)]="s.settingValue" placeholder="POS-80" />
+                <datalist id="printerList">
+                  <option *ngFor="let p of installedPrinters" [value]="p"></option>
+                </datalist>
+              </ng-container>
+              <ng-template #printField>
+                <ng-container *ngIf="isPaperWidthSetting(s.settingKey); else printBoolOrText">
+                  <app-searchable-select [(ngModel)]="s.settingValue" [small]="true" [items]="paperWidthOptions()" />
+                </ng-container>
+                <ng-template #printBoolOrText>
+                  <ng-container *ngIf="isBooleanSetting(s.settingKey); else printText">
+                    <app-searchable-select [(ngModel)]="s.settingValue" [small]="true" [items]="yesNoOptions" />
+                  </ng-container>
+                  <ng-template #printText>
+                    <input class="form-control form-control-sm" [(ngModel)]="s.settingValue" />
+                  </ng-template>
+                </ng-template>
+              </ng-template>
+            </div>
+          </div>
+          <div class="settings-card__actions">
+            <button class="btn btn-outline-secondary btn-sm" type="button" (click)="loadPrinters()" [disabled]="loadingPrinters">Refresh</button>
+            <button class="btn btn-success btn-sm" type="button" (click)="saveAppSettings()" [disabled]="saving">Save Receipt</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- System -->
+      <div class="settings-card settings-card--half">
+        <div class="settings-card__head">System preferences</div>
+        <div class="settings-card__body">
+          <div class="row g-2">
+            <div class="col-md-6" *ngFor="let s of otherSettings">
+              <label class="form-label">{{ settingLabel(s.settingKey) }}</label>
+              <ng-container *ngIf="isBooleanSetting(s.settingKey); else textSetting">
+                <app-searchable-select [(ngModel)]="s.settingValue" [small]="true" [items]="yesNoOptions" />
+              </ng-container>
+              <ng-template #textSetting>
+                <input class="form-control form-control-sm" [(ngModel)]="s.settingValue" />
+              </ng-template>
+            </div>
+          </div>
+          <div class="settings-card__actions">
+            <button class="btn btn-success btn-sm" type="button" (click)="saveAppSettings()" [disabled]="saving">Save Preferences</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Database backup -->
+      <div class="settings-card settings-card--half">
+        <div class="settings-card__head">Database backup</div>
+        <div class="settings-card__body" *ngIf="backupPathSetting as backup">
+          <label class="form-label">Backup file path</label>
+          <input
+            class="form-control form-control-sm mb-2"
+            [(ngModel)]="backup.settingValue"
+            placeholder="D:\InvDB.bak" />
+          <p class="text-muted small mb-2">
+            SQL Server overwrites this file every backup. Use a path the SQL service can write to.
+          </p>
+          <div class="settings-card__actions">
+            <button class="btn btn-outline-secondary btn-sm" type="button" (click)="saveBackupPath()" [disabled]="saving">
+              Save path
+            </button>
+            <button
+              class="btn btn-outline-primary btn-sm"
+              type="button"
+              (click)="createDatabaseBackup()"
+              [disabled]="backingUpDatabase">
+              {{ backingUpDatabase ? 'Backing up...' : 'Backup now' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

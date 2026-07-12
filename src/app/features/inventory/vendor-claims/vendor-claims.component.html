@@ -1,0 +1,164 @@
+<div class="page-shell">
+  <div *ngIf="message" class="alert alert-success">{{ message }}</div>
+  <div *ngIf="errorMessage" class="alert alert-danger">{{ errorMessage }}</div>
+
+  <ng-container *ngIf="!showForm && !viewId">
+    <div class="page-header">
+      <div>
+        <h4>Vendor Claims</h4>
+        <p class="hint-text mb-0">Send damaged goods to vendor and track replacement</p>
+      </div>
+      <button class="btn btn-primary" (click)="openCreate()">+ New Claim</button>
+    </div>
+    <div class="content-panel">
+      <div class="toolbar mb-2">
+        <label class="form-check-label me-2">
+          <input type="checkbox" class="form-check-input me-1" [(ngModel)]="pendingOnly" (change)="load()" />
+          Show pending only
+        </label>
+        <button class="btn btn-outline-secondary btn-sm" (click)="load()" [disabled]="loading">Refresh</button>
+      </div>
+      <div *ngIf="loading" class="loading-row">Loading...</div>
+      <div class="data-table-wrap" *ngIf="!loading">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Claim #</th><th>Date</th><th>Vendor</th><th>Sent</th><th>Received</th><th>Pending</th><th>Status</th><th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngIf="items.length === 0" class="empty-row"><td colspan="8">No claims yet.</td></tr>
+            <tr *ngFor="let c of items">
+              <td><strong>{{ c.claimNumber }}</strong></td>
+              <td>{{ c.claimDate | appDate }}</td>
+              <td>{{ c.supplierName }}</td>
+              <td>{{ c.totalSent | number:'1.2-2' }}</td>
+              <td>{{ c.totalReceived | number:'1.2-2' }}</td>
+              <td><strong>{{ c.totalPending | number:'1.2-2' }}</strong></td>
+              <td [class]="statusClass(c.status)">{{ c.statusName }}</td>
+              <td><button class="btn btn-sm btn-outline-primary" (click)="openView(c)">View</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </ng-container>
+
+  <ng-container *ngIf="showForm">
+    <div class="page-header">
+      <div class="page-header-left">
+        <button type="button" class="btn-back" (click)="cancelCreate()" [disabled]="saving">← Back</button>
+        <h4>Send goods for claim</h4>
+      </div>
+    </div>
+    <div class="form-panel">
+      <form [formGroup]="createForm" (ngSubmit)="saveCreate()" appSaveShortcut [saveShortcutActive]="!saving" (saveShortcut)="saveCreate()">
+        <div class="row g-2 mb-3">
+          <div class="col-md-4">
+            <label class="form-label">Vendor *</label>
+            <app-searchable-select formControlName="supplierId"
+              [items]="supplierSelectOptions" placeholder="Choose..." />
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Date *</label>
+            <input type="date" class="form-control" formControlName="claimDate" />
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Location *</label>
+            <app-searchable-select formControlName="locationId"
+              [items]="locationSelectOptions" placeholder="Choose..." />
+          </div>
+          <div class="col-md-2">
+            <label class="form-label">Notes</label>
+            <input class="form-control" formControlName="notes" placeholder="Optional" />
+          </div>
+        </div>
+        <div class="data-table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr><th>Product</th><th>Qty sent</th><th>Unit cost</th><th></th></tr>
+            </thead>
+            <tbody formArrayName="lines">
+              <tr *ngFor="let line of createLines.controls; let i = index" [formGroupName]="i">
+                <td>
+                  <app-searchable-select formControlName="productId" [small]="true" [wide]="true"
+                    [items]="productSelectOptions" placeholder="Select..."
+                    (selectionChange)="onProductChange(i)" />
+                </td>
+                <td><input type="number" class="form-control form-control-sm" formControlName="quantity" step="0.01" min="0.01" /></td>
+                <td><input type="number" class="form-control form-control-sm" formControlName="unitCost" step="0.01" min="0" /></td>
+                <td><button type="button" class="btn btn-sm btn-outline-danger" (click)="removeCreateLine(i)">×</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <button type="button" class="btn btn-sm btn-outline-primary mt-2" (click)="addCreateLine()">+ Add line</button>
+        <div class="form-footer">
+          <button class="btn btn-success" type="submit" [disabled]="saving">{{ saving ? 'Saving...' : 'Send for claim' }}</button>
+        </div>
+      </form>
+    </div>
+  </ng-container>
+
+  <ng-container *ngIf="viewId">
+    <div class="page-header">
+      <div class="page-header-left">
+        <button type="button" class="btn-back" (click)="closeView()">← Back</button>
+        <h4>Claim {{ viewDetail?.claimNumber || '...' }}</h4>
+      </div>
+    </div>
+    <div *ngIf="loadingView" class="loading-row">Loading...</div>
+    <div class="content-panel" *ngIf="!loadingView && viewDetail">
+      <div class="info-grid mb-3">
+        <div class="info-item"><label>Vendor</label><span>{{ viewDetail.supplierName }}</span></div>
+        <div class="info-item"><label>Date</label><span>{{ viewDetail.claimDate | appDate }}</span></div>
+        <div class="info-item"><label>Status</label><span [class]="statusClass(viewDetail.status)">{{ viewDetail.statusName }}</span></div>
+        <div class="info-item"><label>Sent</label><span>{{ viewDetail.totalSent | number:'1.2-2' }}</span></div>
+        <div class="info-item"><label>Received</label><span>{{ viewDetail.totalReceived | number:'1.2-2' }}</span></div>
+        <div class="info-item"><label>Pending</label><span><strong>{{ viewDetail.totalPending | number:'1.2-2' }}</strong></span></div>
+      </div>
+      <div class="data-table-wrap mb-3">
+        <table class="data-table">
+          <thead>
+            <tr><th>Product</th><th>SKU</th><th>Sent</th><th>Received</th><th>Pending</th></tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let l of viewDetail.lines">
+              <td>{{ l.productName }}</td>
+              <td>{{ l.sku }}</td>
+              <td>{{ l.qtySent | number:'1.2-2' }}</td>
+              <td>{{ l.qtyReceived | number:'1.2-2' }}</td>
+              <td><strong>{{ l.qtyPending | number:'1.2-2' }}</strong></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="section-card" *ngIf="viewDetail.totalPending > 0">
+        <div class="section-card__header"><span class="section-label">Record replacement received</span></div>
+        <div class="section-card__body">
+          <form [formGroup]="receiveForm" (ngSubmit)="saveReceive()" appSaveShortcut [saveShortcutActive]="!saving" (saveShortcut)="saveReceive()">
+            <div class="mb-2">
+              <label class="form-label">Receipt date</label>
+              <input type="date" class="form-control form-control-sm w-auto" formControlName="receiptDate" />
+            </div>
+            <div class="data-table-wrap">
+              <table class="data-table">
+                <thead><tr><th>Product</th><th>Pending</th><th>Qty receiving now</th></tr></thead>
+                <tbody formArrayName="lines">
+                  <tr *ngFor="let line of receiveLines.controls; let i = index" [formGroupName]="i">
+                    <td>{{ line.get('productName')?.value }}</td>
+                    <td>{{ line.get('qtyPending')?.value | number:'1.2-2' }}</td>
+                    <td><input type="number" class="form-control form-control-sm" formControlName="quantity" step="0.01" min="0.01" /></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <button class="btn btn-success btn-sm mt-2" type="submit" [disabled]="receiving || receiveLines.length === 0">
+              {{ receiving ? 'Saving...' : 'Receive replacement' }}
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </ng-container>
+</div>

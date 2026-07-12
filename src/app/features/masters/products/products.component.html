@@ -1,0 +1,218 @@
+<div class="page-shell" appPageNewShortcut [pageNewShortcutActive]="!saving" (pageNewShortcut)="openCreate()">
+  <div *ngIf="message" class="alert alert-success">{{ message }}</div>
+  <div *ngIf="errorMessage" class="alert alert-danger">{{ errorMessage }}</div>
+  <div *ngIf="lookupError && showForm" class="alert alert-warning">{{ lookupError }}</div>
+
+  <ng-container *ngIf="!showForm">
+    <div class="page-header">
+      <h4>Products</h4>
+      <div class="page-header-actions">
+        <button class="btn btn-primary" (click)="openCreate()">+ Add Product</button>
+      </div>
+    </div>
+
+    <div class="content-panel">
+      <div class="toolbar">
+        <input class="form-control" placeholder="Search name, SKU, barcode..." [(ngModel)]="search" (keyup.enter)="load()" />
+        <button class="btn btn-outline-secondary" (click)="load()" [disabled]="loading">Search</button>
+      </div>
+
+      <div class="bulk-upload" *ngIf="enableProductBulkUpload">
+        <p class="bulk-upload__hint text-muted small mb-2">
+          Upload a sheet with <strong>Product Name, Unit</strong> (required).
+          Optional: <strong>Qty, Rate</strong> (opening stock).
+          Category/brand in the sheet are optional — unknown values are ignored (product saved as Uncategorized).
+        </p>
+        <input id="bulkProductFile" type="file" class="bulk-upload__input" accept=".xlsx,.xls,.csv,.txt"
+          (change)="onBulkFileSelected($event)" [disabled]="bulkImporting" />
+        <button type="button" class="btn btn-outline-primary" (click)="triggerBulkFilePicker()"
+          [disabled]="bulkImporting">Choose File</button>
+        <span class="bulk-upload__name">{{ bulkImportFileName || 'No file selected' }}</span>
+        <button type="button" class="btn btn-success" (click)="runBulkImport()"
+          [disabled]="bulkImporting || !bulkImportRows.length">
+          {{ bulkImporting ? 'Uploading…' : 'Upload' }}
+        </button>
+      </div>
+
+      <div class="bulk-import-result" *ngIf="enableProductBulkUpload && bulkImportResult">
+        <div class="alert alert-info mb-0">
+          Created: {{ bulkImportResult.createdCount }} · Opening stock: {{ bulkImportResult.openingStockPostedCount }} · Skipped: {{ bulkImportResult.skippedCount }}
+          <span *ngIf="bulkImportResult.skippedNames.length"> · Duplicates: {{ bulkSkippedPreview }}</span>
+        </div>
+        <ul class="text-danger small mb-0 mt-2" *ngIf="bulkImportResult.errors.length">
+          <li *ngFor="let err of bulkImportResult.errors">{{ err }}</li>
+        </ul>
+      </div>
+
+      <div *ngIf="loading" class="loading-row">Loading...</div>
+
+      <div class="data-table-wrap" *ngIf="!loading">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>SKU</th>
+              <th>Key</th>
+              <th>Name</th>
+              <th>Category</th>
+              <th>Stock</th>
+              <th>Sell Price</th>
+              <th>Status</th>
+              <th class="col-actions">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngIf="products.length === 0" class="empty-row">
+              <td colspan="8">No products found.</td>
+            </tr>
+            <tr *ngFor="let p of products">
+              <td>{{ p.sku }}</td>
+              <td><span *ngIf="p.shortKey" class="badge text-bg-light border">{{ p.shortKey }}</span></td>
+              <td>{{ p.productName }}</td>
+              <td>{{ p.categoryName }}</td>
+              <td [class.text-danger]="p.currentStock <= p.minimumStock">{{ p.currentStock }}</td>
+              <td>{{ p.sellingPrice | number:'1.2-2' }}</td>
+              <td>
+                <span class="badge" [class.text-bg-success]="p.status === 1" [class.text-bg-secondary]="p.status !== 1">
+                  {{ p.status === 1 ? 'Active' : 'Inactive' }}
+                </span>
+              </td>
+              <td class="col-actions">
+                <button class="btn btn-sm btn-outline-primary me-1" (click)="openEdit(p)">Edit</button>
+                <button class="btn btn-sm btn-outline-danger" (click)="remove(p)">Delete</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </ng-container>
+
+  <ng-container *ngIf="showForm">
+    <div class="page-header">
+      <div class="page-header-left">
+        <button type="button" class="btn-back" (click)="cancel()" [disabled]="saving">← Back</button>
+        <h4>{{ editingId ? 'Edit Product' : 'Add Product' }}</h4>
+      </div>
+    </div>
+
+    <div class="form-panel">
+      <div *ngIf="loadingDetail" class="loading-row">Loading product...</div>
+
+      <form *ngIf="!loadingDetail" [formGroup]="form" (ngSubmit)="save()" appSaveShortcut
+        [saveShortcutActive]="!saving" (saveShortcut)="save()">
+        <div class="row g-2">
+          <div class="col-md-3">
+            <label class="form-label">Barcode</label>
+            <input class="form-control" formControlName="barcode" />
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">SKU</label>
+            <input class="form-control" formControlName="sku" placeholder="Optional — auto-generated if empty" />
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Product Name *</label>
+            <input class="form-control" formControlName="productName" />
+          </div>
+
+          <div class="col-md-3">
+            <label class="form-label">Category *</label>
+            <div class="lookup-field">
+              <app-searchable-select formControlName="categoryId" [disabled]="loadingLookups || savingQuickAdd"
+                [items]="categorySelectOptions" [placeholder]="loadingLookups ? 'Loading...' : 'Select...'"
+                [invalid]="!!(form.get('categoryId')?.touched && form.get('categoryId')?.invalid)" />
+              <button type="button" class="btn btn-outline-primary btn-sm lookup-field__add"
+                *ngIf="canQuickAdd('category')" (click)="startQuickAdd('category')"
+                [disabled]="saving || savingQuickAdd" title="Add new category">+</button>
+            </div>
+            <div class="quick-add" *ngIf="quickAddKind === 'category'">
+              <input class="form-control" [(ngModel)]="quickAddName" [ngModelOptions]="{ standalone: true }"
+                placeholder="New category name" (keyup.enter)="saveQuickAdd()" />
+              <button type="button" class="btn btn-success btn-sm" (click)="saveQuickAdd()"
+                [disabled]="savingQuickAdd">Add</button>
+              <button type="button" class="btn btn-secondary btn-sm" (click)="cancelQuickAdd()"
+                [disabled]="savingQuickAdd">Cancel</button>
+            </div>
+          </div>
+
+          <div class="col-md-3">
+            <label class="form-label">Brand</label>
+            <div class="lookup-field">
+              <app-searchable-select formControlName="brandId" [nullable]="true" nullLabel="None"
+                [disabled]="loadingLookups || savingQuickAdd" [items]="brandSelectOptions"
+                [placeholder]="loadingLookups ? 'Loading...' : 'Select...'" />
+              <button type="button" class="btn btn-outline-primary btn-sm lookup-field__add"
+                *ngIf="canQuickAdd('brand')" (click)="startQuickAdd('brand')"
+                [disabled]="saving || savingQuickAdd" title="Add new brand">+</button>
+            </div>
+            <div class="quick-add" *ngIf="quickAddKind === 'brand'">
+              <input class="form-control" [(ngModel)]="quickAddName" [ngModelOptions]="{ standalone: true }"
+                placeholder="New brand name" (keyup.enter)="saveQuickAdd()" />
+              <button type="button" class="btn btn-success btn-sm" (click)="saveQuickAdd()"
+                [disabled]="savingQuickAdd">Add</button>
+              <button type="button" class="btn btn-secondary btn-sm" (click)="cancelQuickAdd()"
+                [disabled]="savingQuickAdd">Cancel</button>
+            </div>
+          </div>
+
+          <div class="col-md-3">
+            <label class="form-label">Unit *</label>
+            <div class="lookup-field">
+              <app-searchable-select formControlName="unitId" [disabled]="loadingLookups || savingQuickAdd"
+                [items]="unitSelectOptions" [placeholder]="loadingLookups ? 'Loading...' : 'Select...'"
+                [invalid]="!!(form.get('unitId')?.touched && form.get('unitId')?.invalid)" />
+              <button type="button" class="btn btn-outline-primary btn-sm lookup-field__add"
+                *ngIf="canQuickAdd('unit')" (click)="startQuickAdd('unit')"
+                [disabled]="saving || savingQuickAdd" title="Add new unit">+</button>
+            </div>
+            <div class="quick-add" *ngIf="quickAddKind === 'unit'">
+              <input class="form-control" [(ngModel)]="quickAddName" [ngModelOptions]="{ standalone: true }"
+                placeholder="Unit name" (keyup.enter)="saveQuickAdd()" />
+              <input class="form-control quick-add__short" [(ngModel)]="quickAddShortName"
+                [ngModelOptions]="{ standalone: true }" placeholder="Short" maxlength="10" />
+              <button type="button" class="btn btn-success btn-sm" (click)="saveQuickAdd()"
+                [disabled]="savingQuickAdd">Add</button>
+              <button type="button" class="btn btn-secondary btn-sm" (click)="cancelQuickAdd()"
+                [disabled]="savingQuickAdd">Cancel</button>
+            </div>
+          </div>
+
+          <div class="col-md-3">
+            <label class="form-label">Status</label>
+            <app-searchable-select formControlName="status" [items]="statusOptions" />
+          </div>
+
+          <div class="col-md-3">
+            <label class="form-label">Purchase Cost *</label>
+            <input type="number" step="0.01" min="0" class="form-control" formControlName="purchaseCost" />
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Selling Price *</label>
+            <input type="number" step="0.01" min="0" class="form-control" formControlName="sellingPrice" />
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Wholesale Price</label>
+            <input type="number" step="0.01" min="0" class="form-control" formControlName="wholesalePrice" />
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Minimum Stock</label>
+            <input type="number" min="0" class="form-control" formControlName="minimumStock" />
+          </div>
+
+          <div class="col-md-2">
+            <label class="form-label">POS Key</label>
+            <input class="form-control" formControlName="shortKey" maxlength="1" placeholder="e.g. R" />
+          </div>
+          <div class="col-md-10">
+            <label class="form-label">Description</label>
+            <input class="form-control" formControlName="description" />
+          </div>
+        </div>
+
+        <div class="form-actions">
+          <button class="btn btn-success" type="submit" [disabled]="saving">{{ saving ? 'Saving...' : 'Save' }}</button>
+          <button class="btn btn-secondary" type="button" (click)="cancel()" [disabled]="saving">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </ng-container>
+</div>

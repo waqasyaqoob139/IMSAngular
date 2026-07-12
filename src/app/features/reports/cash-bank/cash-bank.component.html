@@ -1,0 +1,45 @@
+<div class="page-shell">
+  <div class="page-header">
+    <div>
+      <h4>Cash &amp; Bank</h4>
+      <p class="hint-text mb-0">Account balances and cash/bank books</p>
+    </div>
+  </div>
+
+  <div class="row g-3 mb-3">
+    <div class="col-md-4" *ngFor="let a of accounts">
+      <div class="stat-card">
+        <span>{{ a.accountName }} ({{ a.accountCode }})</span>
+        <strong>{{ a.currentBalance | number:'1.2-2' }}</strong>
+      </div>
+    </div>
+  </div>
+
+  <div class="content-panel">
+    <div class="toolbar">
+      <app-searchable-select [(ngModel)]="selectedAccountId"
+        [items]="accountSelectOptions" placeholder="Select account..." />
+      <input type="date" class="form-control" [(ngModel)]="fromDate" />
+      <input type="date" class="form-control" [(ngModel)]="toDate" />
+      <button class="btn btn-primary" (click)="loadBook()" [disabled]="loading || !selectedAccountId">View Book</button>
+    </div>
+
+    <div *ngIf="loading" class="loading-row">Loading...</div>
+    <div class="data-table-wrap" *ngIf="!loading">
+      <table class="data-table">
+        <thead><tr><th>Date</th><th>Voucher</th><th>Description</th><th>Debit</th><th>Credit</th><th>Balance</th></tr></thead>
+        <tbody>
+          <tr *ngIf="rows.length === 0" class="empty-row"><td colspan="6">Select an account to view its book.</td></tr>
+          <tr *ngFor="let r of rows">
+            <td>{{ r.entryDate | appDate }}</td>
+            <td>{{ r.reference }}</td>
+            <td>{{ r.description }}</td>
+            <td>{{ r.debit | number:'1.2-2' }}</td>
+            <td>{{ r.credit | number:'1.2-2' }}</td>
+            <td>{{ r.balance | number:'1.2-2' }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
