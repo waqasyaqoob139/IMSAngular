@@ -50,6 +50,12 @@
             <tr *ngIf="!users.length" class="empty-row"><td colspan="6">No users yet. Click “Add User” to create one.</td></tr>
           </tbody>
         </table>
+        <app-list-pagination
+          [pagination]="userPagination"
+          [loading]="loading"
+          (pageChange)="onPageChange($event)"
+          (pageSizeChange)="onPageSizeChange($event)">
+        </app-list-pagination>
       </div>
     </div>
   </ng-container>

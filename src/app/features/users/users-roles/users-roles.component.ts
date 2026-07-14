@@ -16,6 +16,7 @@ import {
   normalizeGroupedPermissionsForEdit,
   stripGroupedChildrenWhenFullAccess
 } from '../../../core/models/permissions';
+import { ListPagination } from '../../../core/utils/list-pagination';
 
 interface AppUser {
   userId: number;
@@ -63,6 +64,7 @@ type UsersRolesView = 'users-list' | 'user-form' | 'roles-list' | 'role-form';
 export class UsersRolesComponent implements OnInit {
   view: UsersRolesView = 'users-list';
   users: AppUser[] = [];
+  userPagination = new ListPagination();
   roles: AppRole[] = [];
   permissions: PermissionItem[] = [];
   permissionGroups: PermissionGroupView[] = [];
@@ -124,13 +126,21 @@ export class UsersRolesComponent implements OnInit {
     this.errorMessage = '';
   }
 
+  onPageChange(page: number): void {
+    this.userPagination.pageNumber = page;
+    this.loadUsers();
+  }
+
+  onPageSizeChange(size: number): void {
+    this.userPagination.pageSize = size;
+    this.userPagination.reset();
+    this.loadUsers();
+  }
+
   loadAll(): void {
     this.loading = true;
     this.errorMessage = '';
-    this.api.get<PaginatedList<AppUser>>('/users', { pageSize: 100 }).subscribe({
-      next: res => (this.users = res.data?.items ?? []),
-      error: () => (this.errorMessage = 'Failed to load users.')
-    });
+    this.loadUsers();
     this.api.get<AppRole[]>('/roles').subscribe({
       next: res => (this.roles = res.data ?? []),
       error: () => (this.errorMessage = 'Failed to load roles.')
@@ -145,6 +155,16 @@ export class UsersRolesComponent implements OnInit {
         },
         error: () => (this.errorMessage = 'Failed to load permissions.')
       });
+  }
+
+  private loadUsers(): void {
+    this.api.get<PaginatedList<AppUser>>('/users', this.userPagination.queryParams()).subscribe({
+      next: res => {
+        this.users = res.data?.items ?? [];
+        this.userPagination.applyResponse(res.data);
+      },
+      error: () => (this.errorMessage = 'Failed to load users.')
+    });
   }
 
   private rebuildPermissionGroups(): void {

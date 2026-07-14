@@ -5,8 +5,9 @@ import { finalize } from 'rxjs';
 import { ApiService } from '../../../core/services/api.service';
 import { getApiErrorMessage, PaginatedList } from '../../../core/models/api.models';
 import { blockSaveIfInvalid } from '../../../core/utils/form-validation';
+import { ListPagination } from '../../../core/utils/list-pagination';
 import { SearchableSelectOption } from '../../../shared/components/searchable-select/searchable-select.models';
-import { focusTxnSelector } from '../../../core/utils/txn-keyboard';
+import { focusLineField, focusNextHeaderField, focusTxnSelector, PURCHASE_RETURN_HEADER_FOCUS_KEYS } from '../../../core/utils/txn-keyboard';
 import { todayIsoDate } from '../../../core/utils/date-format';
 
 interface ReturnListItem {
@@ -49,6 +50,7 @@ export class PurchaseReturnsComponent implements OnInit {
   viewDetail: Record<string, unknown> | null = null;
   loadingView = false;
   search = '';
+  pagination = new ListPagination();
   message = '';
   errorMessage = '';
   form;
@@ -121,13 +123,32 @@ export class PurchaseReturnsComponent implements OnInit {
     return this.lines.controls.reduce((sum, c) => sum + this.lineTotal(c.value), 0) + Number(this.form.get('taxAmount')?.value || 0);
   }
 
+  onSearch(): void {
+    this.pagination.reset();
+    this.load();
+  }
+
+  onPageChange(page: number): void {
+    this.pagination.pageNumber = page;
+    this.load();
+  }
+
+  onPageSizeChange(size: number): void {
+    this.pagination.pageSize = size;
+    this.pagination.reset();
+    this.load();
+  }
+
   load(): void {
     this.loading = true;
     this.api
-      .get<PaginatedList<ReturnListItem>>('/purchase-returns', { search: this.search, pageSize: 100 })
+      .get<PaginatedList<ReturnListItem>>('/purchase-returns', this.pagination.queryParams({ search: this.search }))
       .pipe(finalize(() => (this.loading = false)))
       .subscribe({
-        next: res => (this.items = res.data?.items ?? []),
+        next: res => {
+          this.items = res.data?.items ?? [];
+          this.pagination.applyResponse(res.data);
+        },
         error: () => (this.errorMessage = 'Cannot load purchase returns.')
       });
   }
@@ -211,6 +232,9 @@ export class PurchaseReturnsComponent implements OnInit {
               );
             }
           });
+          if (this.lines.length > 0) {
+            setTimeout(() => this.focusReturnQty(0), 0);
+          }
         },
         error: () => (this.errorMessage = 'Cannot load purchase lines.')
       });
@@ -218,6 +242,26 @@ export class PurchaseReturnsComponent implements OnInit {
 
   lineTotal(line: { returnQuantity?: number; unitCost?: number }): number {
     return Math.round(Number(line.returnQuantity || 0) * Number(line.unitCost || 0) * 100) / 100;
+  }
+
+  onQuickFieldEnter(event: Event, field: string): void {
+    event.preventDefault();
+    focusNextHeaderField(field, PURCHASE_RETURN_HEADER_FOCUS_KEYS, () => this.focusReturnQty(0));
+  }
+
+  onLineEnter(index: number, event: Event): void {
+    event.preventDefault();
+    const next = index + 1;
+    if (next < this.lines.length) {
+      this.focusReturnQty(next);
+      return;
+    }
+    focusTxnSelector('[data-txn-focus="save-return"]');
+  }
+
+  focusReturnQty(index: number): void {
+    if (index < 0 || index >= this.lines.length) return;
+    focusLineField(index, 'returnQuantity');
   }
 
   save(): void {

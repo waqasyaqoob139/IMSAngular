@@ -13,7 +13,7 @@
         [nullable]="true" nullLabel="All locations" />
       <input type="date" class="form-control" [(ngModel)]="fromDate" />
       <input type="date" class="form-control" [(ngModel)]="toDate" />
-      <button class="btn btn-primary" (click)="load()" [disabled]="loading">Apply</button>
+      <button class="btn btn-primary" (click)="onSearch()" [disabled]="loading">Apply</button>
     </div>
     <div *ngIf="loading" class="loading-row">Loading...</div>
     <div class="data-table-wrap" *ngIf="!loading">
@@ -36,6 +36,12 @@
           </tr>
         </tbody>
       </table>
+      <app-list-pagination
+        [pagination]="pagination"
+        [loading]="loading"
+        (pageChange)="onPageChange($event)"
+        (pageSizeChange)="onPageSizeChange($event)">
+      </app-list-pagination>
     </div>
   </div>
 </div>

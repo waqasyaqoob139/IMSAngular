@@ -4,6 +4,8 @@ export type TxnPaymentMode = 'cash' | 'credit' | 'partial';
 
 export const SALE_HEADER_FOCUS_KEYS = ['customer', 'saleDate', 'location', 'remarks', 'product-search'] as const;
 export const PURCHASE_HEADER_FOCUS_KEYS = ['supplier', 'invoiceDate', 'location', 'remarks', 'product-search'] as const;
+export const SALE_RETURN_HEADER_FOCUS_KEYS = ['sale', 'returnDate', 'refundMethod', 'tax', 'reason'] as const;
+export const PURCHASE_RETURN_HEADER_FOCUS_KEYS = ['purchase', 'returnDate', 'tax', 'reason'] as const;
 
 export function isNewShortcut(event: KeyboardEvent): boolean {
   if (event.key.toLowerCase() !== 'n' || event.shiftKey) return false;

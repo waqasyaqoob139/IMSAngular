@@ -4,6 +4,7 @@ import { finalize } from 'rxjs';
 import { ApiService } from '../../../core/services/api.service';
 import { PaginatedList } from '../../../core/models/api.models';
 import { blockSaveIfInvalid } from '../../../core/utils/form-validation';
+import { ListPagination } from '../../../core/utils/list-pagination';
 
 interface ExpenseCategory {
   expenseCategoryId: number;
@@ -21,6 +22,7 @@ export class ExpenseCategoriesComponent implements OnInit {
   loading = false;
   saving = false;
   search = '';
+  pagination = new ListPagination();
   showForm = false;
   editingId: number | null = null;
   message = '';
@@ -38,14 +40,33 @@ export class ExpenseCategoriesComponent implements OnInit {
     this.load();
   }
 
+  onSearch(): void {
+    this.pagination.reset();
+    this.load();
+  }
+
+  onPageChange(page: number): void {
+    this.pagination.pageNumber = page;
+    this.load();
+  }
+
+  onPageSizeChange(size: number): void {
+    this.pagination.pageSize = size;
+    this.pagination.reset();
+    this.load();
+  }
+
   load(): void {
     this.loading = true;
     this.errorMessage = '';
     this.api
-      .get<PaginatedList<ExpenseCategory>>('/expense-categories', { search: this.search, pageSize: 100 })
+      .get<PaginatedList<ExpenseCategory>>('/expense-categories', this.pagination.queryParams({ search: this.search }))
       .pipe(finalize(() => (this.loading = false)))
       .subscribe({
-        next: res => (this.items = res.data?.items ?? []),
+        next: res => {
+          this.items = res.data?.items ?? [];
+          this.pagination.applyResponse(res.data);
+        },
         error: () => (this.errorMessage = 'Cannot load expense categories.')
       });
   }

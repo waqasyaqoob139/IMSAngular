@@ -1,0 +1,51 @@
+<nav class="list-pagination" *ngIf="pagination.totalCount > 0" aria-label="Table pagination">
+  <div class="list-pagination__info">
+    Showing <strong>{{ pagination.rangeStart }}–{{ pagination.rangeEnd }}</strong> of
+    <strong>{{ pagination.totalCount }}</strong>
+  </div>
+
+  <div class="list-pagination__controls" *ngIf="pagination.totalPages > 1">
+    <button
+      type="button"
+      class="list-pagination__btn"
+      [disabled]="loading || !pagination.hasPrevious"
+      (click)="goToPage(pagination.pageNumber - 1)"
+      aria-label="Previous page">
+      ‹
+    </button>
+
+    <ng-container *ngFor="let item of pagination.pageItems">
+      <span *ngIf="item === 'ellipsis'" class="list-pagination__ellipsis">…</span>
+      <button
+        *ngIf="item !== 'ellipsis'"
+        type="button"
+        class="list-pagination__btn"
+        [class.list-pagination__btn--active]="item === pagination.pageNumber"
+        [disabled]="loading"
+        (click)="goToPage(item)"
+        [attr.aria-current]="item === pagination.pageNumber ? 'page' : null">
+        {{ item }}
+      </button>
+    </ng-container>
+
+    <button
+      type="button"
+      class="list-pagination__btn"
+      [disabled]="loading || !pagination.hasNext"
+      (click)="goToPage(pagination.pageNumber + 1)"
+      aria-label="Next page">
+      ›
+    </button>
+  </div>
+
+  <label class="list-pagination__size">
+    <span>Per page</span>
+    <select
+      class="form-select form-select-sm"
+      [ngModel]="pagination.pageSize"
+      [disabled]="loading"
+      (ngModelChange)="onPageSizeChange($event)">
+      <option *ngFor="let size of pageSizeOptions" [ngValue]="size">{{ size }}</option>
+    </select>
+  </label>
+</nav>

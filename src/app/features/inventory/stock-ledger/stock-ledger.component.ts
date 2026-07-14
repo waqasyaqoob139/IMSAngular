@@ -2,6 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import { finalize } from 'rxjs';
 import { ApiService } from '../../../core/services/api.service';
 import { LookupsDto, PaginatedList } from '../../../core/models/api.models';
+import { ListPagination, QueryParams } from '../../../core/utils/list-pagination';
 import { mapNamedOptions, SearchableSelectOption } from '../../../shared/components/searchable-select/searchable-select.models';
 
 interface LedgerRow {
@@ -32,6 +33,7 @@ interface NamedOption {
 })
 export class StockLedgerComponent implements OnInit {
   rows: LedgerRow[] = [];
+  pagination = new ListPagination();
   products: NamedOption[] = [];
   locations: NamedOption[] = [];
   loading = false;
@@ -67,23 +69,38 @@ export class StockLedgerComponent implements OnInit {
     this.load();
   }
 
+  onSearch(): void {
+    this.pagination.reset();
+    this.load();
+  }
+
+  onPageChange(page: number): void {
+    this.pagination.pageNumber = page;
+    this.load();
+  }
+
+  onPageSizeChange(size: number): void {
+    this.pagination.pageSize = size;
+    this.pagination.reset();
+    this.load();
+  }
+
   load(): void {
     this.loading = true;
-    const params: {
-      pageSize: number;
-      productId?: number;
-      locationId?: number;
-      fromDate?: string;
-      toDate?: string;
-    } = { pageSize: 100 };
-    if (this.productId) params.productId = this.productId;
-    if (this.locationId) params.locationId = this.locationId;
-    if (this.fromDate) params.fromDate = this.fromDate;
-    if (this.toDate) params.toDate = this.toDate;
+    const filters: QueryParams = {};
+    if (this.productId) filters['productId'] = this.productId;
+    if (this.locationId) filters['locationId'] = this.locationId;
+    if (this.fromDate) filters['fromDate'] = this.fromDate;
+    if (this.toDate) filters['toDate'] = this.toDate;
 
     this.api
-      .get<PaginatedList<LedgerRow>>('/inventory/ledger', params)
+      .get<PaginatedList<LedgerRow>>('/inventory/ledger', this.pagination.queryParams(filters))
       .pipe(finalize(() => (this.loading = false)))
-      .subscribe({ next: res => (this.rows = res.data?.items ?? []) });
+      .subscribe({
+        next: res => {
+          this.rows = res.data?.items ?? [];
+          this.pagination.applyResponse(res.data);
+        }
+      });
   }
 }

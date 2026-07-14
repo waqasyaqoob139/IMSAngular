@@ -4,6 +4,7 @@ import { finalize } from 'rxjs';
 import { ApiService } from '../../../core/services/api.service';
 import { getApiErrorMessage, PaginatedList } from '../../../core/models/api.models';
 import { blockSaveIfInvalid } from '../../../core/utils/form-validation';
+import { ListPagination } from '../../../core/utils/list-pagination';
 import { todayIsoDate } from '../../../core/utils/date-format';
 
 interface PayrollRunListItem {
@@ -65,6 +66,7 @@ export class PayrollRunsComponent implements OnInit {
   payingLineId: number | null = null;
   payingAll = false;
   search = '';
+  pagination = new ListPagination();
   lineSearch = '';
   paymentMethodId = 1;
   message = '';
@@ -130,14 +132,33 @@ export class PayrollRunsComponent implements OnInit {
     return `${this.periodLabel(start, end)} · ${days} day(s)`;
   }
 
+  onSearch(): void {
+    this.pagination.reset();
+    this.load();
+  }
+
+  onPageChange(page: number): void {
+    this.pagination.pageNumber = page;
+    this.load();
+  }
+
+  onPageSizeChange(size: number): void {
+    this.pagination.pageSize = size;
+    this.pagination.reset();
+    this.load();
+  }
+
   load(): void {
     this.loading = true;
     this.errorMessage = '';
     this.api
-      .get<PaginatedList<PayrollRunListItem>>('/payrollruns', { search: this.search, pageSize: 50 })
+      .get<PaginatedList<PayrollRunListItem>>('/payrollruns', this.pagination.queryParams({ search: this.search }))
       .pipe(finalize(() => (this.loading = false)))
       .subscribe({
-        next: res => (this.runs = res.data?.items ?? []),
+        next: res => {
+          this.runs = res.data?.items ?? [];
+          this.pagination.applyResponse(res.data);
+        },
         error: () => (this.errorMessage = 'Cannot load payroll runs.')
       });
   }

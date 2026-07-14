@@ -26,7 +26,7 @@ export class TxnSaveConfirmComponent implements OnChanges, AfterViewInit {
   @Input() saving = false;
   /** When true, show Sale / Sale & Print options (sales only). */
   @Input() printChoice = false;
-  @Input() saveLabel = 'Yes, save';
+  @Input() saveLabel = 'Sale';
   @Input() saveWithPrintLabel = 'Sale & Print';
 
   @Output() confirmed = new EventEmitter<boolean>();
@@ -54,13 +54,14 @@ export class TxnSaveConfirmComponent implements OnChanges, AfterViewInit {
     if (event.key === 'Enter' && !this.saving) {
       event.preventDefault();
       event.stopPropagation();
-      this.emitConfirm(false);
+      // Enter defaults to Sale & Print when that option is shown.
+      this.emitConfirm(this.printChoice);
     }
   }
 
   emitConfirm(printReceipt: boolean): void {
     if (this.saving) return;
-    this.confirmed.emit(printReceipt);
+    this.confirmed.emit(!!printReceipt);
   }
 
   private focusConfirm(): void {

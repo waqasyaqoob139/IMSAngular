@@ -25,6 +25,7 @@ import {
 import { mapNamedOptions, SearchableSelectOption } from '../../../shared/components/searchable-select/searchable-select.models';
 import { TxnBrowseProduct } from '../shared/txn-product-browse.component';
 import { todayIsoDate } from '../../../core/utils/date-format';
+import { ListPagination } from '../../../core/utils/list-pagination';
 import { resolveTxnPaymentStatus, txnPaymentStatusLabel } from '../../../core/utils/txn-payment-status';
 
 interface PurchaseListItem {
@@ -81,6 +82,7 @@ export class PurchasesComponent implements OnInit, OnDestroy {
   paymentMode: PaymentMode = 'credit';
   partialPayAmount = 0;
   productSearch = '';
+  productPickerOpen = false;
   highlightedProductIndex = -1;
   creatingProduct = false;
   productBrowseOpen = false;
@@ -90,6 +92,7 @@ export class PurchasesComponent implements OnInit, OnDestroy {
   enableProductShortKeys = false;
 
   search = '';
+  pagination = new ListPagination();
   message = '';
   errorMessage = '';
   pendingSupplierName: string | null = null;
@@ -293,13 +296,12 @@ export class PurchasesComponent implements OnInit, OnDestroy {
   }
 
   get pickerProducts(): ProductOption[] {
-    const q = this.productSearch.trim();
-    if (!q) return [];
+    if (!this.productPickerOpen) return [];
     return this.filteredProducts;
   }
 
   get showProductPicker(): boolean {
-    return this.productSearch.trim().length > 0 && this.pickerProducts.length > 0;
+    return this.productPickerOpen && this.pickerProducts.length > 0;
   }
 
   get browseProducts(): TxnBrowseProduct[] {
@@ -411,6 +413,7 @@ export class PurchasesComponent implements OnInit, OnDestroy {
   }
 
   onProductSearchInput(): void {
+    this.productPickerOpen = true;
     this.highlightedProductIndex = this.pickerProducts.length > 0 ? 0 : -1;
     this.scheduleLineProductPickerPosition();
   }
@@ -420,6 +423,7 @@ export class PurchasesComponent implements OnInit, OnDestroy {
   }
 
   private dismissProductPicker(): void {
+    this.productPickerOpen = false;
     this.productSearch = '';
     this.highlightedProductIndex = -1;
     this.lineProductPickerStyle = {};
@@ -490,27 +494,43 @@ export class PurchasesComponent implements OnInit, OnDestroy {
   }
 
   onProductSearchKeydown(event: KeyboardEvent): void {
-    const list = this.pickerProducts;
     if (event.key === 'ArrowDown') {
       event.preventDefault();
-      if (!list.length) {
-        focusLastLineField(this.filledLineIndices, 'quantity');
+      if (!this.productPickerOpen) {
+        this.openProductPicker();
         return;
       }
+
+      const list = this.pickerProducts;
+      if (!list.length) return;
+
       this.highlightedProductIndex =
         this.highlightedProductIndex < 0 ? 0 : Math.min(this.highlightedProductIndex + 1, list.length - 1);
       this.scrollPickerHighlightIntoView();
-    } else if (event.key === 'ArrowUp') {
+      return;
+    }
+
+    if (event.key === 'ArrowUp') {
       event.preventDefault();
+      if (!this.productPickerOpen) return;
+      const list = this.pickerProducts;
       if (!list.length) return;
       this.highlightedProductIndex = Math.max(this.highlightedProductIndex - 1, 0);
       this.scrollPickerHighlightIntoView();
-    } else if (event.key === 'Escape') {
+      return;
+    }
+
+    if (event.key === 'Escape') {
       event.preventDefault();
       event.stopPropagation();
-      this.productSearch = '';
-      this.highlightedProductIndex = -1;
+      this.dismissProductPicker();
     }
+  }
+
+  private openProductPicker(): void {
+    this.productPickerOpen = true;
+    this.highlightedProductIndex = this.filteredProducts.length > 0 ? 0 : -1;
+    this.scheduleLineProductPickerPosition();
   }
 
   onProductSearchEnter(event: Event): void {
@@ -602,8 +622,7 @@ export class PurchasesComponent implements OnInit, OnDestroy {
     if (existingIdx >= 0) {
       const line = this.lines.at(existingIdx);
       line.patchValue({ quantity: Number(line.get('quantity')?.value || 0) + 1 });
-      this.productSearch = '';
-      this.highlightedProductIndex = -1;
+      this.dismissProductPicker();
       this.focusLineAfterAdd(existingIdx);
       return;
     }
@@ -616,8 +635,7 @@ export class PurchasesComponent implements OnInit, OnDestroy {
       unitCost: product.purchaseCost
     });
     this.ensureTrailingEmptyLine();
-    this.productSearch = '';
-    this.highlightedProductIndex = -1;
+    this.dismissProductPicker();
     this.focusLineAfterAdd(idx);
   }
 
@@ -845,14 +863,33 @@ export class PurchasesComponent implements OnInit, OnDestroy {
     return resolveTxnPaymentStatus(purchase.paidAmount, purchase.balanceAmount, purchase.grandTotal);
   }
 
+  onSearch(): void {
+    this.pagination.reset();
+    this.load();
+  }
+
+  onPageChange(page: number): void {
+    this.pagination.pageNumber = page;
+    this.load();
+  }
+
+  onPageSizeChange(size: number): void {
+    this.pagination.pageSize = size;
+    this.pagination.reset();
+    this.load();
+  }
+
   load(): void {
     this.loading = true;
     this.errorMessage = '';
     this.api
-      .get<PaginatedList<PurchaseListItem>>('/purchases', { search: this.search, pageSize: 100 })
+      .get<PaginatedList<PurchaseListItem>>('/purchases', this.pagination.queryParams({ search: this.search }))
       .pipe(finalize(() => (this.loading = false)))
       .subscribe({
-        next: res => (this.purchases = res.data?.items ?? []),
+        next: res => {
+          this.purchases = res.data?.items ?? [];
+          this.pagination.applyResponse(res.data);
+        },
         error: () => (this.errorMessage = 'Cannot load purchases. Is the API running?')
       });
   }
@@ -944,6 +981,7 @@ export class PurchasesComponent implements OnInit, OnDestroy {
     this.paymentMode = 'credit';
     this.partialPayAmount = 0;
     this.productSearch = '';
+    this.productPickerOpen = false;
     this.highlightedProductIndex = -1;
     this.productBrowseOpen = false;
     this.taxManuallyEdited = false;
@@ -986,6 +1024,7 @@ export class PurchasesComponent implements OnInit, OnDestroy {
     this.partialPayAmount = draft.partialPayAmount;
     this.taxManuallyEdited = draft.taxManuallyEdited;
     this.productSearch = '';
+    this.productPickerOpen = false;
     this.highlightedProductIndex = -1;
     this.productBrowseOpen = false;
     this.message = '';

@@ -13,7 +13,7 @@
     <div class="content-panel">
       <div class="toolbar mb-2">
         <label class="form-check-label me-2">
-          <input type="checkbox" class="form-check-input me-1" [(ngModel)]="pendingOnly" (change)="load()" />
+          <input type="checkbox" class="form-check-input me-1" [(ngModel)]="pendingOnly" (change)="onPendingOnlyChange()" />
           Show pending only
         </label>
         <button class="btn btn-outline-secondary btn-sm" (click)="load()" [disabled]="loading">Refresh</button>
@@ -40,6 +40,12 @@
             </tr>
           </tbody>
         </table>
+        <app-list-pagination
+          [pagination]="pagination"
+          [loading]="loading"
+          (pageChange)="onPageChange($event)"
+          (pageSizeChange)="onPageSizeChange($event)">
+        </app-list-pagination>
       </div>
     </div>
   </ng-container>

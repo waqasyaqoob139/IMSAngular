@@ -5,6 +5,7 @@ import { Subject, finalize, takeUntil } from 'rxjs';
 import { ApiService } from '../../../core/services/api.service';
 import { getApiErrorMessage, PaginatedList } from '../../../core/models/api.models';
 import { blockSaveIfInvalid } from '../../../core/utils/form-validation';
+import { ListPagination } from '../../../core/utils/list-pagination';
 import { SearchableSelectOption } from '../../../shared/components/searchable-select/searchable-select.models';
 import { focusTxnSelector } from '../../../core/utils/txn-keyboard';
 import { toIsoDateForInput, todayIsoDate } from '../../../core/utils/date-format';
@@ -44,6 +45,7 @@ export class SupplierPaymentsComponent implements OnInit, OnDestroy {
   correctedAmount = 0;
   savingCorrection = false;
   search = '';
+  pagination = new ListPagination();
   message = '';
   errorMessage = '';
   form;
@@ -166,13 +168,32 @@ export class SupplierPaymentsComponent implements OnInit, OnDestroy {
     return Math.max(0, this.selectedSupplier.balance - this.selectedSupplier.openingBalance);
   }
 
+  onSearch(): void {
+    this.pagination.reset();
+    this.load();
+  }
+
+  onPageChange(page: number): void {
+    this.pagination.pageNumber = page;
+    this.load();
+  }
+
+  onPageSizeChange(size: number): void {
+    this.pagination.pageSize = size;
+    this.pagination.reset();
+    this.load();
+  }
+
   load(): void {
     this.loading = true;
     this.api
-      .get<PaginatedList<PaymentListItem>>('/supplier-payments', { search: this.search, pageSize: 100 })
+      .get<PaginatedList<PaymentListItem>>('/supplier-payments', this.pagination.queryParams({ search: this.search }))
       .pipe(finalize(() => (this.loading = false)))
       .subscribe({
-        next: res => (this.items = res.data?.items ?? []),
+        next: res => {
+          this.items = res.data?.items ?? [];
+          this.pagination.applyResponse(res.data);
+        },
         error: () => (this.errorMessage = 'Cannot load payments.')
       });
   }

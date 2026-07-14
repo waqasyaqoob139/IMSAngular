@@ -26,6 +26,7 @@ import {
   TxnPaymentMode
 } from '../../../core/utils/txn-keyboard';
 import { formatAppDate, todayIsoDate } from '../../../core/utils/date-format';
+import { ListPagination } from '../../../core/utils/list-pagination';
 import { resolveTxnPaymentStatus, txnPaymentStatusLabel } from '../../../core/utils/txn-payment-status';
 import { mapNamedOptions, SearchableSelectOption } from '../../../shared/components/searchable-select/searchable-select.models';
 import { TxnBrowseProduct } from '../shared/txn-product-browse.component';
@@ -102,17 +103,20 @@ export class SalesComponent implements OnInit, OnDestroy {
   showReceiptPreview = false;
   receiptPreviewLoading = false;
   receiptPreviewSafeHtml: SafeHtml | null = null;
+  private pendingReceiptAutoPrint = false;
 
   paymentMode: PaymentMode = 'cash';
   partialPayAmount = 0;
   private lastSyncedGrandTotal = 0;
   productSearch = '';
+  productPickerOpen = false;
   highlightedProductIndex = -1;
   productBrowseOpen = false;
   resolvingProductSearch = false;
   lineProductPickerStyle: Record<string, string> = {};
 
   search = '';
+  pagination = new ListPagination();
   message = '';
   errorMessage = '';
   pendingCustomerName: string | null = null;
@@ -289,7 +293,7 @@ export class SalesComponent implements OnInit, OnDestroy {
           this.viewDetail = res.data ?? null;
           if (this.pendingPrintSaleId === saleId) {
             this.pendingPrintSaleId = null;
-            this.openReceiptPreview(saleId);
+            this.openReceiptPreview(saleId, { autoPrint: true });
             this.router.navigate([], {
               relativeTo: this.route,
               queryParams: { print: null },
@@ -315,13 +319,12 @@ export class SalesComponent implements OnInit, OnDestroy {
   }
 
   get pickerProducts(): ProductOption[] {
-    const q = this.productSearch.trim();
-    if (!q) return [];
+    if (!this.productPickerOpen) return [];
     return this.filteredProducts;
   }
 
   get showProductPicker(): boolean {
-    return this.productSearch.trim().length > 0 && this.pickerProducts.length > 0;
+    return this.productPickerOpen && this.pickerProducts.length > 0;
   }
 
   get browseProducts(): TxnBrowseProduct[] {
@@ -438,6 +441,7 @@ export class SalesComponent implements OnInit, OnDestroy {
   }
 
   onProductSearchInput(): void {
+    this.productPickerOpen = true;
     this.highlightedProductIndex = this.pickerProducts.length > 0 ? 0 : -1;
     this.scheduleLineProductPickerPosition();
   }
@@ -447,6 +451,7 @@ export class SalesComponent implements OnInit, OnDestroy {
   }
 
   private dismissProductPicker(): void {
+    this.productPickerOpen = false;
     this.productSearch = '';
     this.highlightedProductIndex = -1;
     this.lineProductPickerStyle = {};
@@ -517,27 +522,43 @@ export class SalesComponent implements OnInit, OnDestroy {
   }
 
   onProductSearchKeydown(event: KeyboardEvent): void {
-    const list = this.pickerProducts;
     if (event.key === 'ArrowDown') {
       event.preventDefault();
-      if (!list.length) {
-        focusLastLineField(this.filledLineIndices, 'quantity');
+      if (!this.productPickerOpen) {
+        this.openProductPicker();
         return;
       }
+
+      const list = this.pickerProducts;
+      if (!list.length) return;
+
       this.highlightedProductIndex =
         this.highlightedProductIndex < 0 ? 0 : Math.min(this.highlightedProductIndex + 1, list.length - 1);
       this.scrollPickerHighlightIntoView();
-    } else if (event.key === 'ArrowUp') {
+      return;
+    }
+
+    if (event.key === 'ArrowUp') {
       event.preventDefault();
+      if (!this.productPickerOpen) return;
+      const list = this.pickerProducts;
       if (!list.length) return;
       this.highlightedProductIndex = Math.max(this.highlightedProductIndex - 1, 0);
       this.scrollPickerHighlightIntoView();
-    } else if (event.key === 'Escape') {
+      return;
+    }
+
+    if (event.key === 'Escape') {
       event.preventDefault();
       event.stopPropagation();
-      this.productSearch = '';
-      this.highlightedProductIndex = -1;
+      this.dismissProductPicker();
     }
+  }
+
+  private openProductPicker(): void {
+    this.productPickerOpen = true;
+    this.highlightedProductIndex = this.filteredProducts.length > 0 ? 0 : -1;
+    this.scheduleLineProductPickerPosition();
   }
 
   private scrollPickerHighlightIntoView(): void {
@@ -597,8 +618,7 @@ export class SalesComponent implements OnInit, OnDestroy {
     if (existingIdx >= 0) {
       const line = this.lines.at(existingIdx);
       line.patchValue({ quantity: Number(line.get('quantity')?.value || 0) + 1 });
-      this.productSearch = '';
-      this.highlightedProductIndex = -1;
+      this.dismissProductPicker();
       this.cdr.detectChanges();
       this.focusLineAfterAdd(existingIdx);
       return;
@@ -612,8 +632,7 @@ export class SalesComponent implements OnInit, OnDestroy {
       unitPrice: Number(product.sellingPrice) || 0
     });
     this.ensureTrailingEmptyLine();
-    this.productSearch = '';
-    this.highlightedProductIndex = -1;
+    this.dismissProductPicker();
     this.cdr.detectChanges();
     this.focusLineAfterAdd(idx);
   }
@@ -999,16 +1018,25 @@ export class SalesComponent implements OnInit, OnDestroy {
     this.showReceiptPreview = false;
     this.receiptPreviewLoading = false;
     this.receiptPreviewSafeHtml = null;
+    this.pendingReceiptAutoPrint = false;
   }
 
   printReceiptPreview(): void {
-    const win = this.receiptPreviewFrame?.nativeElement.contentWindow;
-    if (!win) return;
+    const frame = this.receiptPreviewFrame?.nativeElement;
+    const win = frame?.contentWindow;
+    if (!win || !frame?.contentDocument?.body) return;
     win.focus();
     win.print();
   }
 
-  private openReceiptPreview(saleId: number): void {
+  onReceiptPreviewLoad(): void {
+    if (!this.pendingReceiptAutoPrint) return;
+    this.pendingReceiptAutoPrint = false;
+    setTimeout(() => this.printReceiptPreview(), 150);
+  }
+
+  private openReceiptPreview(saleId: number, options?: { autoPrint?: boolean }): void {
+    this.pendingReceiptAutoPrint = options?.autoPrint ?? false;
     this.receiptPreviewLoading = true;
     this.showReceiptPreview = true;
     this.receiptPreviewSafeHtml = null;
@@ -1021,6 +1049,7 @@ export class SalesComponent implements OnInit, OnDestroy {
         next: html => {
           if (!html) {
             this.showReceiptPreview = false;
+            this.pendingReceiptAutoPrint = false;
             this.errorMessage = 'Could not load receipt preview.';
             return;
           }
@@ -1028,9 +1057,60 @@ export class SalesComponent implements OnInit, OnDestroy {
         },
         error: err => {
           this.showReceiptPreview = false;
+          this.pendingReceiptAutoPrint = false;
           this.errorMessage = getApiErrorMessage(err, 'Could not load receipt preview.');
         }
       });
+  }
+
+  private printReceiptInBrowser(saleId: number, onDone?: () => void): void {
+    this.saleReceipt.fetchReceiptHtml(saleId).subscribe({
+      next: html => {
+        if (!html) {
+          this.errorMessage = 'Could not load receipt for printing.';
+          onDone?.();
+          return;
+        }
+
+        const iframe = document.createElement('iframe');
+        iframe.setAttribute('title', 'Receipt print');
+        iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
+        document.body.appendChild(iframe);
+
+        const win = iframe.contentWindow;
+        const doc = win?.document;
+        if (!doc) {
+          iframe.remove();
+          this.errorMessage = 'Could not open print window.';
+          onDone?.();
+          return;
+        }
+
+        doc.open();
+        doc.write(html);
+        doc.close();
+
+        const cleanup = () => setTimeout(() => iframe.remove(), 1000);
+        const triggerPrint = () => {
+          setTimeout(() => {
+            win?.focus();
+            win?.print();
+            cleanup();
+            onDone?.();
+          }, 200);
+        };
+
+        if (doc.readyState === 'complete') {
+          triggerPrint();
+        } else {
+          iframe.onload = triggerPrint;
+        }
+      },
+      error: err => {
+        this.errorMessage = getApiErrorMessage(err, 'Could not load receipt for printing.');
+        onDone?.();
+      }
+    });
   }
 
   paymentStatusLabel(status: number): string {
@@ -1045,14 +1125,33 @@ export class SalesComponent implements OnInit, OnDestroy {
     return name?.trim() || 'Walk-in';
   }
 
+  onSearch(): void {
+    this.pagination.reset();
+    this.load();
+  }
+
+  onPageChange(page: number): void {
+    this.pagination.pageNumber = page;
+    this.load();
+  }
+
+  onPageSizeChange(size: number): void {
+    this.pagination.pageSize = size;
+    this.pagination.reset();
+    this.load();
+  }
+
   load(): void {
     this.loading = true;
     this.errorMessage = '';
     this.api
-      .get<PaginatedList<SaleListItem>>('/sales', { search: this.search, pageSize: 100 })
+      .get<PaginatedList<SaleListItem>>('/sales', this.pagination.queryParams({ search: this.search }))
       .pipe(finalize(() => (this.loading = false)))
       .subscribe({
-        next: res => (this.sales = res.data?.items ?? []),
+        next: res => {
+          this.sales = res.data?.items ?? [];
+          this.pagination.applyResponse(res.data);
+        },
         error: () => (this.errorMessage = 'Cannot load sales. Is the API running?')
       });
   }
@@ -1147,6 +1246,7 @@ export class SalesComponent implements OnInit, OnDestroy {
     this.partialPayAmount = 0;
     this.lastSyncedGrandTotal = 0;
     this.productSearch = '';
+    this.productPickerOpen = false;
     this.highlightedProductIndex = -1;
     this.productBrowseOpen = false;
     this.taxManuallyEdited = false;
@@ -1191,6 +1291,7 @@ export class SalesComponent implements OnInit, OnDestroy {
     this.paymentMethodId = draft.paymentMethodId || 1;
     this.taxManuallyEdited = draft.taxManuallyEdited;
     this.productSearch = '';
+    this.productPickerOpen = false;
     this.highlightedProductIndex = -1;
     this.productBrowseOpen = false;
     this.message = '';
@@ -1304,10 +1405,9 @@ export class SalesComponent implements OnInit, OnDestroy {
     this.showSaveConfirm = false;
   }
 
-  confirmSave(printReceipt = false): void {
+  confirmSave(printReceipt: boolean): void {
     if (this.saving) return;
-    this.saveWithPrint = printReceipt;
-    this.performSave();
+    this.performSave(printReceipt === true);
   }
 
   save(): void {
@@ -1355,20 +1455,39 @@ export class SalesComponent implements OnInit, OnDestroy {
   }
 
   private finishAfterSave(saleId: number, wantsPrint: boolean, baseMessage: string): void {
-    if (saleId > 0 && wantsPrint) {
-      this.saleReceipt.printSaleReceipt(saleId).subscribe(result => {
-        const message = result.printed ? baseMessage : `${baseMessage} ${result.message}`;
-        this.loadProducts();
-        this.startNewFormAfterSave(message);
-      });
+    if (!(saleId > 0 && wantsPrint)) {
+      this.startNewFormAfterSave(baseMessage);
+      setTimeout(() => this.loadProducts(), 0);
       return;
     }
 
-    this.loadProducts();
-    this.startNewFormAfterSave(baseMessage);
+    // Print on thermal first, then reset form — so Sale & Print always hits the printer.
+    this.message = `${baseMessage} Printing…`;
+    this.errorMessage = '';
+
+    this.saleReceipt.printSaleReceipt(saleId).subscribe({
+      next: result => {
+        if (result.printed) {
+          this.startNewFormAfterSave(`${baseMessage} Receipt printed.`);
+          setTimeout(() => this.loadProducts(), 0);
+          return;
+        }
+
+        // Thermal unavailable / failed — show HTML preview so cashier can still print.
+        this.message = `${baseMessage} ${result.message || 'Opening receipt preview…'}`;
+        this.openReceiptPreview(saleId);
+        setTimeout(() => this.loadProducts(), 0);
+      },
+      error: err => {
+        this.message = baseMessage;
+        this.errorMessage = getApiErrorMessage(err, 'Print failed.');
+        this.openReceiptPreview(saleId);
+        setTimeout(() => this.loadProducts(), 0);
+      }
+    });
   }
 
-  private performSave(): void {
+  private performSave(wantsPrint = false): void {
     if (this.saving) return;
 
     const v = this.form.getRawValue();
@@ -1383,7 +1502,7 @@ export class SalesComponent implements OnInit, OnDestroy {
       .filter(l => l.productId > 0 && l.quantity > 0);
 
     this.saving = true;
-    this.message = '';
+    this.message = wantsPrint ? 'Saving & printing…' : '';
     this.errorMessage = '';
 
     const pendingName = this.pendingCustomerName?.trim() || '';
@@ -1424,7 +1543,6 @@ export class SalesComponent implements OnInit, OnDestroy {
       .subscribe({
         next: res => {
           this.showSaveConfirm = false;
-          const wantsPrint = this.saveWithPrint || this.autoPrintSaleReceipt;
           this.saveWithPrint = false;
           const saleId = Number(res.data);
           this.finishAfterSave(saleId, wantsPrint, 'Sale saved successfully.');

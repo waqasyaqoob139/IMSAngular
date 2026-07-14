@@ -5,6 +5,7 @@ import { ApiService } from '../../../core/services/api.service';
 import { getApiErrorMessage, PaginatedList } from '../../../core/models/api.models';
 import { mapNamedOptions, mapProductOptions, SearchableSelectOption } from '../../../shared/components/searchable-select/searchable-select.models';
 import { todayIsoDate } from '../../../core/utils/date-format';
+import { ListPagination } from '../../../core/utils/list-pagination';
 
 interface ClaimListItem {
   supplierClaimId: number;
@@ -65,6 +66,7 @@ interface NamedOption {
 })
 export class VendorClaimsComponent implements OnInit {
   items: ClaimListItem[] = [];
+  pagination = new ListPagination();
   products: ProductOption[] = [];
   suppliers: NamedOption[] = [];
   locations: NamedOption[] = [];
@@ -137,16 +139,32 @@ export class VendorClaimsComponent implements OnInit {
     if (this.createLines.length > 1) this.createLines.removeAt(i);
   }
 
+  onPendingOnlyChange(): void {
+    this.pagination.reset();
+    this.load();
+  }
+
+  onPageChange(page: number): void {
+    this.pagination.pageNumber = page;
+    this.load();
+  }
+
+  onPageSizeChange(size: number): void {
+    this.pagination.pageSize = size;
+    this.pagination.reset();
+    this.load();
+  }
+
   load(): void {
     this.loading = true;
     this.api
-      .get<PaginatedList<ClaimListItem>>('/inventory/claims', {
-        pageSize: 100,
-        pendingOnly: this.pendingOnly
-      })
+      .get<PaginatedList<ClaimListItem>>('/inventory/claims', this.pagination.queryParams({ pendingOnly: this.pendingOnly }))
       .pipe(finalize(() => (this.loading = false)))
       .subscribe({
-        next: res => (this.items = res.data?.items ?? []),
+        next: res => {
+          this.items = res.data?.items ?? [];
+          this.pagination.applyResponse(res.data);
+        },
         error: () => (this.errorMessage = 'Cannot load vendor claims.')
       });
   }

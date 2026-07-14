@@ -22,7 +22,7 @@
           </svg>
         </button>
       </div>
-      <p class="dash-top__date">{{ todayLabel }}</p>
+      <p class="dash-top__date">{{ headerDateLabel }}</p>
     </div>
     <div class="dash-top__actions">
       <a
@@ -48,6 +48,7 @@
   <div *ngIf="!loading && !data && !errorMessage" class="alert alert-secondary mb-2 py-2">No dashboard data.</div>
 
   <ng-container *ngIf="!loading && data">
+    <div class="dash-refreshing" *ngIf="dashboardLoading" aria-live="polite">Updating…</div>
     <!-- Setup -->
     <section class="dash-setup mb-2" *ngIf="setup && setup.completedCount < setup.totalCount">
       <div class="dash-setup__head">
@@ -66,15 +67,36 @@
       </div>
     </section>
 
-    <!-- Highlight: today's sales -->
+    <!-- Highlight: day's sales -->
     <section class="dash-highlight mb-2">
       <div class="dash-highlight__main">
-        <span class="dash-highlight__label">Today's sales</span>
+        <div class="dash-highlight__head">
+          <span class="dash-highlight__label">{{ salesHighlightLabel }}</span>
+          <div class="dash-date-picker">
+            <label class="visually-hidden" for="dash-date">View date</label>
+            <input
+              id="dash-date"
+              type="date"
+              class="form-control form-control-sm dash-date-picker__input"
+              [ngModel]="selectedDate"
+              (ngModelChange)="onSelectedDateChange($event)"
+              [disabled]="dashboardLoading"
+              title="View date" />
+            <button
+              type="button"
+              class="dash-date-picker__today"
+              *ngIf="!isViewingToday"
+              (click)="goToToday()"
+              [disabled]="dashboardLoading">
+              Today
+            </button>
+          </div>
+        </div>
         <span class="dash-highlight__value">{{ displayMoneyLabel(data.todaySales) }}</span>
         <span class="dash-highlight__sub">
-          Profit {{ displayMoneyLabel(data.todayProfit) }}
+          {{ dayMetricLabel('Profit') }} {{ displayMoneyLabel(data.todayProfit) }}
           <span class="mx-1">·</span>
-          Month profit {{ displayMoneyLabel(data.monthProfit) }}
+          {{ monthProfitLabel }} {{ displayMoneyLabel(data.monthProfit) }}
         </span>
       </div>
       <div class="dash-highlight__dues">
@@ -129,7 +151,7 @@
           <div class="activity-card__head">
             <div>
               <h2 class="activity-card__title">Recent activity</h2>
-              <p class="activity-card__hint">Grouped by invoice — sale/purchase with its returns together</p>
+              <p class="activity-card__hint">{{ recentActivityHint }}</p>
             </div>
             <div class="activity-filters">
               <button type="button" class="activity-filter" [class.activity-filter--active]="activityFilter === 'all'" (click)="setActivityFilter('all')">All</button>
@@ -138,51 +160,50 @@
             </div>
           </div>
           <div class="activity-feed" *ngIf="filteredActivityGroups.length; else noActivity">
-            <article
-              *ngFor="let group of filteredActivityGroups"
-              class="activity-group"
-              [class.activity-group--sale]="group.category === 'sale'"
-              [class.activity-group--purchase]="group.category === 'purchase'"
-              [class.activity-group--returned]="isFullyReturned(group)">
-              <a
-                class="activity-group__head"
-                [routerLink]="groupRoute(group)"
-                [queryParams]="groupQueryParams(group)">
-                <span class="activity-group__icon" aria-hidden="true">{{ groupIcon(group.category) }}</span>
-                <span class="activity-group__main">
-                  <span class="activity-group__title">
-                    {{ group.parentDocumentNumber }}
-                    <span class="activity-group__category">{{ groupCategoryLabel(group.category) }}</span>
-                    <span class="activity-group__status" *ngIf="groupStatus(group)">{{ groupStatus(group) }}</span>
-                  </span>
-                  <span class="activity-group__party">{{ group.partyName }}</span>
+            <a
+              *ngFor="let group of visibleActivityGroups"
+              class="activity-row"
+              [class.activity-row--sale]="group.category === 'sale'"
+              [class.activity-row--purchase]="group.category === 'purchase'"
+              [class.activity-row--returned]="isFullyReturned(group)"
+              [routerLink]="groupRoute(group)"
+              [queryParams]="groupQueryParams(group)">
+              <span class="activity-row__badge">{{ activityTypeLabel(group) }}</span>
+              <span class="activity-row__body">
+                <span class="activity-row__title">
+                  <strong>{{ group.parentDocumentNumber }}</strong>
+                  <span class="activity-row__party">{{ activityPartyLabel(group) }}</span>
                 </span>
-                <span class="activity-group__side">
-                  <span class="activity-group__net" [class.text-danger]="figuresVisible && group.netAmount < 0">
-                    Net {{ displayMoneyLabel(group.netAmount) }}
-                  </span>
-                  <span class="activity-group__when">{{ activityWhen(group.latestActivityDate) }}</span>
+                <span class="activity-row__meta">
+                  <span class="activity-row__when">{{ activityWhen(group.latestActivityDate) }}</span>
+                  <span class="activity-row__note" *ngIf="activityNote(group)">{{ activityNote(group) }}</span>
                 </span>
-              </a>
-              <div class="activity-group__timeline" *ngIf="group.steps.length > 1">
-                <a
-                  *ngFor="let step of group.steps"
-                  class="activity-group__step"
-                  [class.activity-group__step--return]="isReturnActivity(step.type)"
-                  [routerLink]="stepRoute(step)"
-                  [queryParams]="stepQueryParams(step)">
-                  <span class="activity-group__step-label">{{ activityStepLabel(step.type) }}</span>
-                  <span class="activity-group__step-doc">{{ step.documentNumber }}</span>
-                  <span class="activity-group__step-amt" [class.text-danger]="figuresVisible && isReturnActivity(step.type)">
-                    {{ displaySignedMoney(step.amount, isReturnActivity(step.type)) }}
-                  </span>
-                  <span class="activity-group__step-when">{{ activityWhen(step.activityDate) }}</span>
-                </a>
-              </div>
-            </article>
+              </span>
+              <span class="activity-row__amount">
+                <span
+                  class="activity-row__value"
+                  [class.text-danger]="figuresVisible && isFullyReturned(group)">
+                  {{ activityAmountLabel(group) }}
+                </span>
+                <span class="activity-row__caption" *ngIf="activityAmountCaption(group)">
+                  {{ activityAmountCaption(group) }}
+                </span>
+              </span>
+            </a>
+          </div>
+          <div class="activity-feed__footer" *ngIf="filteredActivityGroups.length">
+            <button
+              type="button"
+              class="activity-feed__more"
+              *ngIf="hiddenActivityCount > 0"
+              (click)="showAllActivity()">
+              Show {{ hiddenActivityCount }} more
+            </button>
+            <a class="activity-feed__link" *ngIf="activityFilter !== 'purchases'" routerLink="/transactions/sales">Sales →</a>
+            <a class="activity-feed__link" *ngIf="activityFilter !== 'sales'" routerLink="/transactions/purchases">Purchases →</a>
           </div>
           <ng-template #noActivity>
-            <p class="activity-empty" *ngIf="data.recentActivityGroups.length; else noActivityAtAll">No {{ activityFilter === 'all' ? '' : activityFilter }} transactions in recent history.</p>
+            <p class="activity-empty" *ngIf="data.recentActivityGroups.length; else noActivityAtAll">No {{ activityFilter === 'all' ? '' : activityFilter }} on this date.</p>
             <ng-template #noActivityAtAll>
               <p class="activity-empty">No transactions yet — <a routerLink="/transactions/sales">create a sale</a> or <a routerLink="/transactions/purchases">add a purchase</a>.</p>
             </ng-template>
@@ -194,7 +215,7 @@
         <div class="activity-card h-100">
           <div class="activity-card__head">
             <h2 class="activity-card__title">Best sellers</h2>
-            <span class="activity-card__meta">Last 30 days</span>
+            <span class="activity-card__meta">{{ bestSellersMeta }}</span>
           </div>
           <div class="top-list" *ngIf="data.topSellingProducts.length; else noTop">
             <div

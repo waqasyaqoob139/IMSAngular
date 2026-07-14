@@ -6,8 +6,8 @@
     <div class="content-panel">
       <div class="toolbar">
         <span class="toolbar-title">Sales Returns</span>
-        <input class="form-control txn-list-search" appTxnAutofocus placeholder="Search..." [(ngModel)]="search" (keyup.enter)="load()" />
-        <button class="btn btn-outline-secondary btn-sm" (click)="load()" [disabled]="loading">Search</button>
+        <input class="form-control txn-list-search" appTxnAutofocus placeholder="Search..." [(ngModel)]="search" (keyup.enter)="onSearch()" />
+        <button class="btn btn-outline-secondary btn-sm" (click)="onSearch()" [disabled]="loading">Search</button>
         <div class="toolbar-actions">
           <button class="btn btn-primary btn-sm" (click)="openCreate()">+ New Return</button>
         </div>
@@ -30,6 +30,12 @@
             </tr>
           </tbody>
         </table>
+        <app-list-pagination
+          [pagination]="pagination"
+          [loading]="loading"
+          (pageChange)="onPageChange($event)"
+          (pageSizeChange)="onPageSizeChange($event)">
+        </app-list-pagination>
       </div>
     </div>
   </ng-container>
@@ -68,26 +74,32 @@
         <div class="row g-2 mb-3">
           <div class="col-md-4">
             <label class="form-label">Sale Invoice *</label>
-            <app-searchable-select formControlName="saleId" appTxnAutofocus
+            <app-searchable-select formControlName="saleId" appTxnAutofocus txnFocus="sale"
               [items]="saleSelectOptions" placeholder="Select sale..."
-              (selectionChange)="onSaleChange()" />
+              (selectionChange)="onSaleChange()"
+              (keydown.enter)="onQuickFieldEnter($event, 'sale')" />
           </div>
           <div class="col-md-3">
             <label class="form-label">Return Date *</label>
-            <input type="datetime-local" class="form-control" formControlName="returnDate" />
+            <input type="datetime-local" class="form-control" formControlName="returnDate" data-txn-focus="returnDate"
+              (keydown.enter)="onQuickFieldEnter($event, 'returnDate')" />
           </div>
           <div class="col-md-2">
             <label class="form-label">Refund Via</label>
-            <app-searchable-select formControlName="refundMethodId"
-              [items]="refundMethodOptions" />
+            <app-searchable-select formControlName="refundMethodId" txnFocus="refundMethod"
+              [items]="refundMethodOptions"
+              (keydown.enter)="onQuickFieldEnter($event, 'refundMethod')" />
           </div>
           <div class="col-md-2">
             <label class="form-label">Tax</label>
-            <input type="number" class="form-control" formControlName="taxAmount" step="0.01" min="0" />
+            <input type="number" class="form-control" formControlName="taxAmount" step="0.01" min="0"
+              data-txn-focus="tax"
+              (keydown.enter)="onQuickFieldEnter($event, 'tax')" />
           </div>
           <div class="col-md-12">
             <label class="form-label">Reason</label>
-            <input class="form-control" formControlName="reason" />
+            <input class="form-control" formControlName="reason" data-txn-focus="reason"
+              (keydown.enter)="onQuickFieldEnter($event, 'reason')" />
           </div>
         </div>
 
@@ -102,7 +114,10 @@
                 <td>{{ line.get('productName')?.value }}</td>
                 <td>{{ line.get('available')?.value }}</td>
                 <td>{{ line.get('unitPrice')?.value | number:'1.2-2' }}</td>
-                <td><input type="number" class="form-control form-control-sm" formControlName="returnQuantity" min="0" step="0.01" /></td>
+                <td><input type="number" class="form-control form-control-sm" formControlName="returnQuantity" min="0" step="0.01"
+                  [attr.data-line-index]="i"
+                  data-line-field="returnQuantity"
+                  (keydown.enter)="onLineEnter(i, $event)" /></td>
                 <td>{{ lineTotal(line.value) | number:'1.2-2' }}</td>
               </tr>
             </tbody>
@@ -111,8 +126,9 @@
 
         <div class="form-footer">
           <span class="me-3"><strong>Total: {{ grandTotal | number:'1.2-2' }}</strong></span>
-          <button class="btn btn-success btn-sm" type="submit" [disabled]="saving || lines.length === 0" title="Save (Ctrl+S)">{{ saving ? 'Saving...' : 'Save Return' }}</button>
+          <button class="btn btn-success btn-sm" type="submit" data-txn-focus="save-return" [disabled]="saving || lines.length === 0" title="Save (Ctrl+S)">{{ saving ? 'Saving...' : 'Save Return' }}</button>
           <button class="btn btn-secondary btn-sm" type="button" (click)="cancel()" [disabled]="saving" title="Back to list (Esc)">Cancel</button>
+          <p class="pos-kbd-hint mb-0 ms-md-auto">Enter moves to next field · Ctrl+S save · Esc cancel</p>
         </div>
       </form>
     </div>

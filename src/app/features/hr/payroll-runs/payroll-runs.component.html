@@ -13,8 +13,8 @@
 
     <div class="content-panel">
       <div class="toolbar">
-        <input class="form-control" placeholder="Search run number..." [(ngModel)]="search" (keyup.enter)="load()" />
-        <button class="btn btn-outline-secondary" (click)="load()" [disabled]="loading">Search</button>
+        <input class="form-control" placeholder="Search run number..." [(ngModel)]="search" (keyup.enter)="onSearch()" />
+        <button class="btn btn-outline-secondary" (click)="onSearch()" [disabled]="loading">Search</button>
       </div>
 
       <div *ngIf="loading" class="loading-row">Loading...</div>
@@ -53,6 +53,12 @@
             </tr>
           </tbody>
         </table>
+        <app-list-pagination
+          [pagination]="pagination"
+          [loading]="loading"
+          (pageChange)="onPageChange($event)"
+          (pageSizeChange)="onPageSizeChange($event)">
+        </app-list-pagination>
       </div>
     </div>
   </ng-container>

@@ -6,8 +6,8 @@
     <div class="content-panel">
       <div class="toolbar">
         <span class="toolbar-title">Expenses</span>
-        <input class="form-control txn-list-search" appTxnAutofocus placeholder="Search..." [(ngModel)]="search" (keyup.enter)="load()" />
-        <button class="btn btn-outline-secondary btn-sm" (click)="load()" [disabled]="loading">Search</button>
+        <input class="form-control txn-list-search" appTxnAutofocus placeholder="Search..." [(ngModel)]="search" (keyup.enter)="onSearch()" />
+        <button class="btn btn-outline-secondary btn-sm" (click)="onSearch()" [disabled]="loading">Search</button>
         <div class="toolbar-actions">
           <button class="btn btn-primary btn-sm" (click)="openCreate()">+ Add Expense</button>
         </div>
@@ -30,6 +30,12 @@
             </tr>
           </tbody>
         </table>
+        <app-list-pagination
+          [pagination]="pagination"
+          [loading]="loading"
+          (pageChange)="onPageChange($event)"
+          (pageSizeChange)="onPageSizeChange($event)">
+        </app-list-pagination>
       </div>
     </div>
   </ng-container>

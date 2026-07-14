@@ -13,6 +13,8 @@ import {
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ControlValueAccessor, FormsModule, NG_VALUE_ACCESSOR } from '@angular/forms';
+import { NavigationStart, Router } from '@angular/router';
+import { filter, Subject, takeUntil } from 'rxjs';
 import { SEARCHABLE_CREATE_VALUE, SearchableSelectOption, valuesEqual } from './searchable-select.models';
 
 @Component({
@@ -73,6 +75,7 @@ export class SearchableSelectComponent implements ControlValueAccessor, OnDestro
 
   private onChange: (value: unknown) => void = () => {};
   private onTouched: () => void = () => {};
+  private readonly destroy$ = new Subject<void>();
   private scrollListener = () => {
     if (this.open) {
       this.portalPanelToBody();
@@ -80,10 +83,23 @@ export class SearchableSelectComponent implements ControlValueAccessor, OnDestro
     }
   };
 
-  constructor(private readonly hostRef: ElementRef<HTMLElement>) {}
+  constructor(
+    private readonly hostRef: ElementRef<HTMLElement>,
+    private readonly router: Router
+  ) {
+    this.router.events.pipe(
+      filter((event): event is NavigationStart => event instanceof NavigationStart),
+      takeUntil(this.destroy$)
+    ).subscribe(() => {
+      if (this.open) this.finishClose();
+    });
+  }
 
   ngOnDestroy(): void {
+    this.destroy$.next();
+    this.destroy$.complete();
     this.detachScrollListener();
+    this.teardownPanel();
   }
 
   get displayLabel(): string {
@@ -316,6 +332,7 @@ export class SearchableSelectComponent implements ControlValueAccessor, OnDestro
     this.search = '';
     this.panelStyle = {};
     this.detachScrollListener();
+    this.restorePanelToHost();
     this.onTouched();
     if (wasOpen) this.openChange.emit(false);
     setTimeout(() => this.triggerRef?.nativeElement.focus(), 0);
@@ -391,5 +408,26 @@ export class SearchableSelectComponent implements ControlValueAccessor, OnDestro
     if (panel && panel.parentElement !== document.body) {
       document.body.appendChild(panel);
     }
+  }
+
+  private restorePanelToHost(): void {
+    const panel = this.panelRef?.nativeElement;
+    const host = this.hostRef.nativeElement;
+    if (panel && panel.parentElement === document.body) {
+      host.appendChild(panel);
+    }
+  }
+
+  private teardownPanel(): void {
+    this.open = false;
+    const panel = this.panelRef?.nativeElement;
+    if (!panel) return;
+
+    if (panel.parentElement === document.body) {
+      panel.remove();
+      return;
+    }
+
+    this.restorePanelToHost();
   }
 }

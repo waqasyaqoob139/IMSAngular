@@ -5,6 +5,7 @@ import { ApiService } from '../../../core/services/api.service';
 import { getApiErrorMessage, PaginatedList } from '../../../core/models/api.models';
 import { mapNamedOptions, SearchableSelectOption } from '../../../shared/components/searchable-select/searchable-select.models';
 import { blockSaveIfInvalid } from '../../../core/utils/form-validation';
+import { ListPagination } from '../../../core/utils/list-pagination';
 import { todayIsoDate } from '../../../core/utils/date-format';
 
 interface SalaryPaymentItem {
@@ -36,6 +37,7 @@ export class SalaryPaymentsComponent implements OnInit {
   saving = false;
   showForm = false;
   search = '';
+  pagination = new ListPagination();
   message = '';
   errorMessage = '';
   form;
@@ -78,14 +80,33 @@ export class SalaryPaymentsComponent implements OnInit {
     });
   }
 
+  onSearch(): void {
+    this.pagination.reset();
+    this.load();
+  }
+
+  onPageChange(page: number): void {
+    this.pagination.pageNumber = page;
+    this.load();
+  }
+
+  onPageSizeChange(size: number): void {
+    this.pagination.pageSize = size;
+    this.pagination.reset();
+    this.load();
+  }
+
   load(): void {
     this.loading = true;
     this.errorMessage = '';
     this.api
-      .get<PaginatedList<SalaryPaymentItem>>('/salarypayments', { search: this.search, pageSize: 100 })
+      .get<PaginatedList<SalaryPaymentItem>>('/salarypayments', this.pagination.queryParams({ search: this.search }))
       .pipe(finalize(() => (this.loading = false)))
       .subscribe({
-        next: res => (this.items = res.data?.items ?? []),
+        next: res => {
+          this.items = res.data?.items ?? [];
+          this.pagination.applyResponse(res.data);
+        },
         error: () => (this.errorMessage = 'Cannot load salary payments.')
       });
   }

@@ -1,4 +1,4 @@
-import { Component, ElementRef, EventEmitter, Input, OnChanges, Output, SimpleChanges, ViewChild } from '@angular/core';
+import { Component, ElementRef, EventEmitter, Input, OnChanges, OnDestroy, Output, SimpleChanges, ViewChild } from '@angular/core';
 import { focusTxnElement } from '../../../core/utils/txn-keyboard';
 
 export interface TxnBrowseProduct {
@@ -14,7 +14,7 @@ export interface TxnBrowseProduct {
   templateUrl: './txn-product-browse.component.html',
   standalone: false
 })
-export class TxnProductBrowseComponent implements OnChanges {
+export class TxnProductBrowseComponent implements OnChanges, OnDestroy {
   @Input() open = false;
   @Input() products: TxnBrowseProduct[] = [];
   @Input() priceLabel = 'Price';
@@ -27,6 +27,8 @@ export class TxnProductBrowseComponent implements OnChanges {
 
   filter = '';
   highlightedIndex = 0;
+
+  constructor(private readonly hostRef: ElementRef<HTMLElement>) {}
 
   get filteredProducts(): TxnBrowseProduct[] {
     const q = this.filter.trim().toLowerCase();
@@ -46,6 +48,13 @@ export class TxnProductBrowseComponent implements OnChanges {
         focusTxnElement(this.browseSearchInputRef?.nativeElement);
       }, 0);
     }
+    if (openChange?.currentValue === false && openChange.previousValue === true) {
+      this.restoreOverlayToHost();
+    }
+  }
+
+  ngOnDestroy(): void {
+    this.teardownOverlay();
   }
 
   private portalOverlayToBody(): void {
@@ -53,6 +62,26 @@ export class TxnProductBrowseComponent implements OnChanges {
     if (overlay && overlay.parentElement !== document.body) {
       document.body.appendChild(overlay);
     }
+  }
+
+  private restoreOverlayToHost(): void {
+    const overlay = this.browseOverlayRef?.nativeElement;
+    const host = this.hostRef.nativeElement;
+    if (overlay && overlay.parentElement === document.body) {
+      host.appendChild(overlay);
+    }
+  }
+
+  private teardownOverlay(): void {
+    const overlay = this.browseOverlayRef?.nativeElement;
+    if (!overlay) return;
+
+    if (overlay.parentElement === document.body) {
+      overlay.remove();
+      return;
+    }
+
+    this.restoreOverlayToHost();
   }
 
   close(): void {

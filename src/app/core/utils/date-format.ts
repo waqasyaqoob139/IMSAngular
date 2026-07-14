@@ -6,6 +6,12 @@ export function todayIsoDate(): string {
   return toIsoDateParts(d);
 }
 
+/** Business calendar day in Pakistan (UTC+5), matching API dashboard defaults. */
+export function businessTodayIsoDate(): string {
+  const pk = new Date(Date.now() + 5 * 60 * 60 * 1000);
+  return `${pk.getUTCFullYear()}-${String(pk.getUTCMonth() + 1).padStart(2, '0')}-${String(pk.getUTCDate()).padStart(2, '0')}`;
+}
+
 function toIsoDateParts(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
@@ -79,7 +85,7 @@ function toDisplayDateParts(day: number, month: number, year: number): string {
 }
 
 /** API datetimes are stored in UTC; display in Pakistan time (UTC+5). */
-function parseApiDateTime(value: string): Date {
+export function parseApiDateTime(value: string): Date {
   const s = value.trim();
   if (/Z$|[+-]\d{2}:\d{2}$/.test(s)) {
     return new Date(s);

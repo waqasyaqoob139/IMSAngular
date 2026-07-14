@@ -1,5 +1,11 @@
 import { Component, OnInit } from '@angular/core';
-import { formatAppDateLong } from '../../core/utils/date-format';
+import {
+  businessTodayIsoDate,
+  formatAppDate,
+  formatAppDateLong,
+  parseApiDateTime,
+  toIsoDateForInput
+} from '../../core/utils/date-format';
 import { finalize } from 'rxjs';
 import { ApiService } from '../../core/services/api.service';
 import { getApiErrorMessage } from '../../core/models/api.models';
@@ -79,6 +85,7 @@ interface QuickAction {
 })
 export class DashboardComponent implements OnInit {
   private static readonly FIGURES_VISIBLE_KEY = 'ims.dashboard.figuresVisible';
+  private static readonly ACTIVITY_PREVIEW_LIMIT = 5;
 
   data: DashboardData | null = null;
   setup: SetupStatus | null = null;
@@ -86,8 +93,13 @@ export class DashboardComponent implements OnInit {
   errorMessage = '';
   lowStockAlertEnabled = true;
   activityFilter: 'all' | 'sales' | 'purchases' = 'all';
+  activityShowAll = false;
   glanceStats: MetricTile[] = [];
   figuresVisible = false;
+  selectedDate = businessTodayIsoDate();
+  dashboardLoading = false;
+
+  readonly businessToday = businessTodayIsoDate();
 
   readonly quickActions: QuickAction[] = [
     { label: 'New Sale', route: '/transactions/sales', tone: 'indigo', icon: '+', primary: true },
@@ -109,9 +121,74 @@ export class DashboardComponent implements OnInit {
       }
     });
 
+    this.loadDashboard();
+
+    this.api.get<SetupStatus>('/settings/setup').subscribe({
+      next: res => (this.setup = res.data ?? null)
+    });
+  }
+
+  get isViewingToday(): boolean {
+    return this.selectedDate === this.businessToday;
+  }
+
+  get headerDateLabel(): string {
+    if (this.isViewingToday) return formatAppDateLong();
+    const d = this.parseSelectedDate();
+    return d ? formatAppDateLong(d) : formatAppDate(this.selectedDate);
+  }
+
+  get salesHighlightLabel(): string {
+    return this.isViewingToday ? "Today's sales" : `Sales on ${formatAppDate(this.selectedDate)}`;
+  }
+
+  get monthProfitLabel(): string {
+    if (this.isViewingToday) return 'Month profit';
+    const d = this.parseSelectedDate();
+    if (!d) return 'Month profit';
+    return `Profit through ${d.toLocaleDateString('en-PK', { day: 'numeric', month: 'short' })}`;
+  }
+
+  get bestSellersMeta(): string {
+    if (this.isViewingToday) return 'Last 30 days';
+    return `30 days ending ${formatAppDate(this.selectedDate)}`;
+  }
+
+  get recentActivityHint(): string {
+    if (this.isViewingToday) return 'Latest sales and purchases — tap a row to open';
+    return `Sales and purchases on ${formatAppDate(this.selectedDate)} — tap a row to open`;
+  }
+
+  onSelectedDateChange(value: string): void {
+    const iso = toIsoDateForInput(value);
+    if (iso === this.selectedDate) return;
+    this.selectedDate = iso;
+    this.activityShowAll = false;
+    this.loadDashboard();
+  }
+
+  goToToday(): void {
+    if (this.isViewingToday) return;
+    this.selectedDate = this.businessToday;
+    this.activityShowAll = false;
+    this.loadDashboard();
+  }
+
+  private loadDashboard(): void {
+    this.dashboardLoading = true;
+    this.errorMessage = '';
+
+    const params: Record<string, string> = {};
+    if (!this.isViewingToday) {
+      params['date'] = this.selectedDate;
+    }
+
     this.api
-      .get<DashboardData>('/dashboard')
-      .pipe(finalize(() => (this.loading = false)))
+      .get<DashboardData>('/dashboard', params)
+      .pipe(finalize(() => {
+        this.loading = false;
+        this.dashboardLoading = false;
+      }))
       .subscribe({
         next: res => {
           this.data = res.data ?? null;
@@ -120,14 +197,17 @@ export class DashboardComponent implements OnInit {
         error: err =>
           (this.errorMessage = getApiErrorMessage(err, 'Cannot load dashboard. Restart the API if needed.'))
       });
-
-    this.api.get<SetupStatus>('/settings/setup').subscribe({
-      next: res => (this.setup = res.data ?? null)
-    });
   }
 
-  get todayLabel(): string {
-    return formatAppDateLong();
+  private parseSelectedDate(): Date | null {
+    const match = this.selectedDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!match) return null;
+    const d = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+
+  dayMetricLabel(prefix: string): string {
+    return this.isViewingToday ? `${prefix} today` : `${prefix} on ${formatAppDate(this.selectedDate)}`;
   }
 
   get setupProgress(): number {
@@ -154,17 +234,17 @@ export class DashboardComponent implements OnInit {
   }
 
   displayMoney(value: number): string {
-    if (!this.figuresVisible) return '••••••';
+    if (!this.figuresVisible) return '***';
     return this.formatMoney(value);
   }
 
   displayMoneyLabel(value: number): string {
-    if (!this.figuresVisible) return 'Rs ••••••';
+    if (!this.figuresVisible) return 'Rs ***';
     return `Rs ${this.formatMoney(value)}`;
   }
 
   displaySignedMoney(value: number, negative = false): string {
-    if (!this.figuresVisible) return 'Rs ••••••';
+    if (!this.figuresVisible) return 'Rs ***';
     return `${negative ? '−' : ''}Rs ${this.formatMoney(value)}`;
   }
 
@@ -174,46 +254,70 @@ export class DashboardComponent implements OnInit {
     return Math.round((qty / max) * 100);
   }
 
-  activityStepLabel(type: string): string {
-    switch (type) {
-      case 'sale':
-        return 'Sale';
-      case 'sale_return':
-        return 'Return';
-      case 'purchase':
-        return 'Purchase';
-      case 'purchase_return':
-        return 'Return';
-      default:
-        return type;
-    }
+  activityTypeLabel(group: RecentActivityGroup): string {
+    return group.category === 'purchase' ? 'Purchase' : 'Sale';
   }
 
-  groupCategoryLabel(category: string): string {
-    return category === 'purchase' ? 'Purchase' : 'Sale';
+  activityPartyLabel(group: RecentActivityGroup): string {
+    const name = group.partyName?.trim();
+    if (!name) return group.category === 'purchase' ? 'Supplier' : 'Customer';
+    return name;
   }
 
-  groupStatus(group: RecentActivityGroup): string {
-    const hasReturn = group.steps.some(s => this.isReturnActivity(s.type));
-    if (!hasReturn) return '';
+  groupPrimaryAmount(group: RecentActivityGroup): number {
     const primary = group.steps.find(s => s.type === 'sale' || s.type === 'purchase');
-    if (primary && Math.abs(group.netAmount) < 0.01) return 'Fully returned';
-    return 'Has return';
+    return primary?.amount ?? group.netAmount;
+  }
+
+  groupReturnTotal(group: RecentActivityGroup): number {
+    return group.steps
+      .filter(s => this.isReturnActivity(s.type))
+      .reduce((sum, s) => sum + s.amount, 0);
+  }
+
+  hasReturnActivity(group: RecentActivityGroup): boolean {
+    return group.steps.some(s => this.isReturnActivity(s.type));
+  }
+
+  activityNote(group: RecentActivityGroup): string {
+    if (!this.hasReturnActivity(group)) return '';
+    if (this.isFullyReturned(group)) return 'Fully returned';
+    if (!this.figuresVisible) return 'Partial return';
+    return `Returned ${this.formatMoney(this.groupReturnTotal(group))}`;
+  }
+
+  activityAmountLabel(group: RecentActivityGroup): string {
+    if (this.hasReturnActivity(group) && !this.isFullyReturned(group)) {
+      return this.displayMoneyLabel(group.netAmount);
+    }
+    return this.displayMoneyLabel(this.groupPrimaryAmount(group));
+  }
+
+  activityAmountCaption(group: RecentActivityGroup): string {
+    if (!this.hasReturnActivity(group) || this.isFullyReturned(group)) return '';
+    return `Was ${this.displayMoneyLabel(this.groupPrimaryAmount(group))}`;
   }
 
   isFullyReturned(group: RecentActivityGroup): boolean {
-    return this.groupStatus(group) === 'Fully returned';
+    if (!this.hasReturnActivity(group)) return false;
+    return Math.abs(group.netAmount) < 0.01;
   }
 
   activityWhen(iso: string): string {
-    const d = new Date(iso);
+    // Same UTC→local parse path as sale/purchase detail (`appDate` / formatAppDateTime).
+    const d = parseApiDateTime(String(iso ?? '').trim());
     if (Number.isNaN(d.getTime())) return iso;
 
     const now = new Date();
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const startOfThat = new Date(d.getFullYear(), d.getMonth(), d.getDate());
     const dayDiff = Math.round((startOfToday.getTime() - startOfThat.getTime()) / 86_400_000);
-    const time = d.toLocaleTimeString('en-PK', { hour: 'numeric', minute: '2-digit', hour12: true });
+
+    const hours = d.getHours();
+    const mins = String(d.getMinutes()).padStart(2, '0');
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    const h12 = String(hours % 12 || 12).padStart(2, '0');
+    const time = `${h12}:${mins} ${ampm}`;
 
     if (dayDiff === 0) return `Today, ${time}`;
     if (dayDiff === 1) return `Yesterday, ${time}`;
@@ -229,31 +333,17 @@ export class DashboardComponent implements OnInit {
     return { id: group.parentId };
   }
 
-  stepRoute(step: RecentActivityStep): string[] {
-    switch (step.type) {
-      case 'sale':
-        return ['/transactions/sales'];
-      case 'sale_return':
-        return ['/transactions/sale-returns'];
-      case 'purchase':
-        return ['/transactions/purchases'];
-      case 'purchase_return':
-        return ['/transactions/purchase-returns'];
-      default:
-        return ['/dashboard'];
-    }
-  }
-
-  stepQueryParams(step: RecentActivityStep): Record<string, string | number> {
-    return { id: step.id };
-  }
-
   isReturnActivity(type: string): boolean {
     return type === 'sale_return' || type === 'purchase_return';
   }
 
   setActivityFilter(filter: ActivityFilter): void {
     this.activityFilter = filter;
+    this.activityShowAll = false;
+  }
+
+  showAllActivity(): void {
+    this.activityShowAll = true;
   }
 
   get filteredActivityGroups(): RecentActivityGroup[] {
@@ -268,8 +358,14 @@ export class DashboardComponent implements OnInit {
     return items;
   }
 
-  groupIcon(category: string): string {
-    return category === 'purchase' ? 'P' : 'S';
+  get visibleActivityGroups(): RecentActivityGroup[] {
+    const items = this.filteredActivityGroups;
+    if (this.activityShowAll) return items;
+    return items.slice(0, DashboardComponent.ACTIVITY_PREVIEW_LIMIT);
+  }
+
+  get hiddenActivityCount(): number {
+    return Math.max(0, this.filteredActivityGroups.length - this.visibleActivityGroups.length);
   }
 
   private buildMetricZones(): void {
@@ -278,8 +374,8 @@ export class DashboardComponent implements OnInit {
     const d = this.data;
 
     this.glanceStats = [
-      { label: 'Purchases today', value: d.todayPurchase, tone: 'teal' },
-      { label: 'Profit today', value: d.todayProfit, tone: 'emerald' },
+      { label: this.dayMetricLabel('Purchases'), value: d.todayPurchase, tone: 'teal' },
+      { label: this.dayMetricLabel('Profit'), value: d.todayProfit, tone: 'emerald' },
       { label: 'Cash in hand', value: d.cashInHand, tone: 'slate' },
       { label: 'Bank balance', value: d.bankBalance, tone: 'sky' }
     ];

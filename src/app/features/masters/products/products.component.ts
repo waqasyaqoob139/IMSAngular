@@ -6,6 +6,7 @@ import { AuthService } from '../../../core/services/auth.service';
 import { LookupsDto, PaginatedList, getApiErrorMessage } from '../../../core/models/api.models';
 import { mapNamedOptions, SearchableSelectOption } from '../../../shared/components/searchable-select/searchable-select.models';
 import { blockSaveIfInvalid } from '../../../core/utils/form-validation';
+import { ListPagination } from '../../../core/utils/list-pagination';
 import { parseProductImportFile, ProductImportRow } from '../../../core/utils/product-import';
 import { PERMISSIONS } from '../../../core/models/permissions';
 
@@ -76,6 +77,7 @@ export class ProductsComponent implements OnInit {
   saving = false;
   loadingDetail = false;
   search = '';
+  pagination = new ListPagination();
   showForm = false;
   editingId: number | null = null;
   message = '';
@@ -225,14 +227,33 @@ export class ProductsComponent implements OnInit {
       });
   }
 
+  onSearch(): void {
+    this.pagination.reset();
+    this.load();
+  }
+
+  onPageChange(page: number): void {
+    this.pagination.pageNumber = page;
+    this.load();
+  }
+
+  onPageSizeChange(size: number): void {
+    this.pagination.pageSize = size;
+    this.pagination.reset();
+    this.load();
+  }
+
   load(): void {
     this.loading = true;
     this.errorMessage = '';
     this.api
-      .get<PaginatedList<Product>>('/products', { search: this.search, pageSize: 100 })
+      .get<PaginatedList<Product>>('/products', this.pagination.queryParams({ search: this.search }))
       .pipe(finalize(() => (this.loading = false)))
       .subscribe({
-        next: res => (this.products = res.data?.items ?? []),
+        next: res => {
+          this.products = res.data?.items ?? [];
+          this.pagination.applyResponse(res.data);
+        },
         error: () =>
           (this.errorMessage = 'Cannot reach API. Start the backend: dotnet run in InventoryManagementSystem.API')
       });

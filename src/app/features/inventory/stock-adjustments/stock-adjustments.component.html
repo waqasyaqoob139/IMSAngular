@@ -29,6 +29,12 @@
             </tr>
           </tbody>
         </table>
+        <app-list-pagination
+          [pagination]="pagination"
+          [loading]="loading"
+          (pageChange)="onPageChange($event)"
+          (pageSizeChange)="onPageSizeChange($event)">
+        </app-list-pagination>
       </div>
     </div>
   </ng-container>
