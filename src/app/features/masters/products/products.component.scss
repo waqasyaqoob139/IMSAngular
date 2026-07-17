@@ -10,6 +10,47 @@
   }
 }
 
+.product-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+  align-items: flex-end;
+  margin-bottom: 0.875rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--ims-border, #e5e7eb);
+}
+
+.product-filters__field {
+  flex: 1 1 10rem;
+  min-width: 8rem;
+  max-width: 16rem;
+
+  .form-label {
+    display: block;
+    margin-bottom: 0.2rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--ims-text-muted, #667085);
+  }
+}
+
+.product-filters__field--serial {
+  flex: 0 1 7rem;
+  max-width: 8rem;
+}
+
+.product-filters__field--category {
+  flex: 1 1 12rem;
+  max-width: 16rem;
+}
+
+.product-filters__actions {
+  display: flex;
+  gap: 0.35rem;
+  flex-shrink: 0;
+  padding-bottom: 1px;
+}
+
 .lookup-field__add {
   flex-shrink: 0;
   min-width: 2rem;

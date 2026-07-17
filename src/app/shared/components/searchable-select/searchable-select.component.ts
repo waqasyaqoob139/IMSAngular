@@ -46,6 +46,8 @@ export class SearchableSelectComponent implements ControlValueAccessor, OnDestro
   @Output() selectionChange = new EventEmitter<unknown>();
   @Output() pendingTextChange = new EventEmitter<string | null>();
   @Output() openChange = new EventEmitter<boolean>();
+  /** Emitted when the panel search text changes (for server-side filtering). */
+  @Output() searchChange = new EventEmitter<string>();
 
   @ViewChild('trigger') triggerRef?: ElementRef<HTMLButtonElement>;
   @ViewChild('searchInput') searchInputRef?: ElementRef<HTMLInputElement>;
@@ -171,6 +173,7 @@ export class SearchableSelectComponent implements ControlValueAccessor, OnDestro
     this.openChange.emit(true);
     this.search = this.pendingText?.trim() ?? '';
     this.highlightedIndex = 0;
+    this.searchChange.emit(this.search.trim());
     setTimeout(() => {
       this.portalPanelToBody();
       this.updatePanelPosition();
@@ -228,6 +231,7 @@ export class SearchableSelectComponent implements ControlValueAccessor, OnDestro
 
   onSearchChange(): void {
     this.highlightedIndex = 0;
+    this.searchChange.emit(this.search.trim());
     if (this.open) {
       this.portalPanelToBody();
       this.updatePanelPosition();

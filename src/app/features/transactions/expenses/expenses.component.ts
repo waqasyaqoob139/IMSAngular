@@ -3,7 +3,8 @@ import { FormBuilder, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { finalize } from 'rxjs';
 import { ApiService } from '../../../core/services/api.service';
-import { getApiErrorMessage, LookupsDto, PaginatedList } from '../../../core/models/api.models';
+import { LookupsService } from '../../../core/services/lookups.service';
+import { getApiErrorMessage, PaginatedList } from '../../../core/models/api.models';
 import { mapNamedOptions, SearchableSelectOption } from '../../../shared/components/searchable-select/searchable-select.models';
 import { blockSaveIfInvalid } from '../../../core/utils/form-validation';
 import { ListPagination } from '../../../core/utils/list-pagination';
@@ -58,7 +59,8 @@ export class ExpensesComponent implements OnInit {
     private api: ApiService,
     private fb: FormBuilder,
     private route: ActivatedRoute,
-    private router: Router
+    private router: Router,
+    private lookupsService: LookupsService
   ) {
     this.form = this.fb.group({
       expenseCategoryId: [null as number | null, Validators.required],
@@ -147,9 +149,9 @@ export class ExpensesComponent implements OnInit {
   }
 
   loadLookups(): void {
-    this.api.get<LookupsDto>('/lookups').subscribe({
-      next: res => {
-        this.categories = (res.data?.expenseCategories ?? [])
+    this.lookupsService.getLookups().subscribe({
+      next: data => {
+        this.categories = (data.expenseCategories ?? [])
           .map(c => ({
             id: Number((c as { id?: number; Id?: number }).id ?? (c as { Id?: number }).Id),
             name: String((c as { name?: string; Name?: string }).name ?? (c as { Name?: string }).Name ?? '')

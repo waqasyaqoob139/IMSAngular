@@ -22,9 +22,12 @@ interface PaymentListItem {
 interface PartyOption {
   id: number;
   name: string;
+  phone: string | null;
   balance: number;
   openingBalance: number;
 }
+
+type PageMode = 'dues' | 'list' | 'form' | 'view';
 
 @Component({
   selector: 'app-customer-payments',
@@ -33,11 +36,13 @@ interface PartyOption {
 })
 export class CustomerPaymentsComponent implements OnInit, OnDestroy {
   items: PaymentListItem[] = [];
+  dues: PartyOption[] = [];
   customers: PartyOption[] = [];
   loading = false;
+  loadingDues = false;
   loadingParties = false;
   saving = false;
-  showForm = false;
+  mode: PageMode = 'dues';
   viewId: number | null = null;
   viewDetail: Record<string, unknown> | null = null;
   loadingDetail = false;
@@ -45,7 +50,9 @@ export class CustomerPaymentsComponent implements OnInit, OnDestroy {
   correctedAmount = 0;
   savingCorrection = false;
   search = '';
+  duesSearch = '';
   pagination = new ListPagination();
+  duesPagination = new ListPagination();
   message = '';
   errorMessage = '';
   form;
@@ -78,18 +85,23 @@ export class CustomerPaymentsComponent implements OnInit, OnDestroy {
 
   private resolveViewFromRoute(): void {
     const id = Number(this.route.snapshot.queryParams['id']);
+    const view = this.route.snapshot.queryParams['view'];
+    const customerId = Number(this.route.snapshot.queryParams['customerId']);
+
     if (id > 0) {
       this.openViewById(id);
-    } else if (this.route.snapshot.queryParams['view'] === 'list') {
+    } else if (view === 'list') {
       this.showList();
+    } else if (view === 'create' || customerId > 0) {
+      this.resetCreateForm(customerId > 0 ? customerId : null);
     } else {
-      this.resetCreateForm();
+      this.showDues();
     }
   }
 
   private openViewById(id: number): void {
+    this.mode = 'view';
     this.viewId = id;
-    this.showForm = false;
     this.loadingDetail = true;
     this.viewDetail = null;
     this.api
@@ -169,9 +181,18 @@ export class CustomerPaymentsComponent implements OnInit, OnDestroy {
     return Math.max(0, this.selectedCustomer.balance - this.selectedCustomer.openingBalance);
   }
 
+  get duesTotal(): number {
+    return this.dues.reduce((sum, d) => sum + d.balance, 0);
+  }
+
   onSearch(): void {
     this.pagination.reset();
     this.load();
+  }
+
+  onDuesSearch(): void {
+    this.duesPagination.reset();
+    this.loadDues();
   }
 
   onPageChange(page: number): void {
@@ -183,6 +204,17 @@ export class CustomerPaymentsComponent implements OnInit, OnDestroy {
     this.pagination.pageSize = size;
     this.pagination.reset();
     this.load();
+  }
+
+  onDuesPageChange(page: number): void {
+    this.duesPagination.pageNumber = page;
+    this.loadDues();
+  }
+
+  onDuesPageSizeChange(size: number): void {
+    this.duesPagination.pageSize = size;
+    this.duesPagination.reset();
+    this.loadDues();
   }
 
   load(): void {
@@ -199,10 +231,49 @@ export class CustomerPaymentsComponent implements OnInit, OnDestroy {
       });
   }
 
+  loadDues(): void {
+    this.loadingDues = true;
+    this.api
+      .get<
+        PaginatedList<{
+          customerId: number;
+          customerName: string;
+          phone: string | null;
+          openingBalance: number;
+          currentBalance: number;
+        }>
+      >(
+        '/customer-payments/parties',
+        this.duesPagination.queryParams({ search: this.duesSearch, outstandingOnly: true })
+      )
+      .pipe(finalize(() => (this.loadingDues = false)))
+      .subscribe({
+        next: res => {
+          this.dues = (res.data?.items ?? []).map(c => ({
+            id: c.customerId,
+            name: c.customerName,
+            phone: c.phone ?? null,
+            balance: Number(c.currentBalance ?? 0),
+            openingBalance: Number(c.openingBalance ?? 0)
+          }));
+          this.duesPagination.applyResponse(res.data);
+        },
+        error: () => (this.errorMessage = 'Cannot load customers to collect from.')
+      });
+  }
+
   loadParties(): void {
     this.loadingParties = true;
     this.api
-      .get<PaginatedList<{ customerId: number; customerName: string; openingBalance: number; currentBalance: number }>>('/customers', {
+      .get<
+        PaginatedList<{
+          customerId: number;
+          customerName: string;
+          phone: string | null;
+          openingBalance: number;
+          currentBalance: number;
+        }>
+      >('/customer-payments/parties', {
         pageSize: 500
       })
       .pipe(finalize(() => (this.loadingParties = false)))
@@ -212,6 +283,7 @@ export class CustomerPaymentsComponent implements OnInit, OnDestroy {
             .map(c => ({
               id: c.customerId,
               name: c.customerName,
+              phone: c.phone ?? null,
               balance: Number(c.currentBalance ?? 0),
               openingBalance: Number(c.openingBalance ?? 0)
             }))
@@ -222,50 +294,67 @@ export class CustomerPaymentsComponent implements OnInit, OnDestroy {
       });
   }
 
-  openCreate(): void {
+  openDues(): void {
     this.router.navigate(['/transactions/customer-payments']);
+  }
+
+  openCreate(customerId?: number): void {
+    this.router.navigate(['/transactions/customer-payments'], {
+      queryParams: customerId ? { view: 'create', customerId } : { view: 'create' }
+    });
+  }
+
+  collectFrom(party: PartyOption): void {
+    this.openCreate(party.id);
   }
 
   startNew(): void {
     if (this.saving) return;
-    if (this.viewId) {
-      this.router.navigate(['/transactions/customer-payments']);
-      return;
-    }
-    this.resetCreateForm();
+    this.openCreate();
   }
 
   openList(): void {
     this.router.navigate(['/transactions/customer-payments'], { queryParams: { view: 'list' } });
   }
 
-  showList(): void {
+  showDues(): void {
+    this.mode = 'dues';
     this.viewId = null;
     this.viewDetail = null;
-    this.showForm = false;
+    this.loadDues();
+    setTimeout(() => focusTxnSelector('.txn-list-search'), 0);
+  }
+
+  showList(): void {
+    this.mode = 'list';
+    this.viewId = null;
+    this.viewDetail = null;
     this.load();
     setTimeout(() => focusTxnSelector('.txn-list-search'), 0);
   }
 
-  private resetCreateForm(): void {
+  private resetCreateForm(preselectCustomerId: number | null = null): void {
+    this.mode = 'form';
     this.viewId = null;
     this.viewDetail = null;
-    this.showForm = true;
     this.message = '';
     this.errorMessage = '';
     this.loadParties();
     this.form.reset({
-      customerId: null,
+      customerId: preselectCustomerId,
       paymentDate: todayIsoDate(),
       amount: 0,
       paymentMethodId: 1,
       referenceNumber: '',
       remarks: ''
     });
+    if (preselectCustomerId) {
+      this.onCustomerChange(preselectCustomerId);
+    }
   }
 
   cancel(): void {
-    this.openList();
+    this.openDues();
   }
 
   payFullBalance(): void {
@@ -302,7 +391,7 @@ export class CustomerPaymentsComponent implements OnInit, OnDestroy {
         next: () => {
           this.message = 'Payment recorded.';
           this.loadParties();
-          this.openList();
+          this.openDues();
         },
         error: err => (this.errorMessage = getApiErrorMessage(err, 'Save failed.'))
       });

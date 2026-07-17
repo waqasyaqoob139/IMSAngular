@@ -2,6 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import { FormBuilder, Validators } from '@angular/forms';
 import { finalize } from 'rxjs';
 import { ApiService } from '../../../core/services/api.service';
+import { LookupsService } from '../../../core/services/lookups.service';
 import { PaginatedList } from '../../../core/models/api.models';
 import { blockSaveIfInvalid } from '../../../core/utils/form-validation';
 import { ListPagination } from '../../../core/utils/list-pagination';
@@ -30,7 +31,11 @@ export class CategoriesComponent implements OnInit {
   errorMessage = '';
   form;
 
-  constructor(private api: ApiService, private fb: FormBuilder) {
+  constructor(
+    private api: ApiService,
+    private fb: FormBuilder,
+    private lookupsService: LookupsService
+  ) {
     this.form = this.fb.group({
       categoryName: ['', Validators.required],
       parentCategoryId: [null as number | null],
@@ -119,6 +124,7 @@ export class CategoriesComponent implements OnInit {
 
     req.pipe(finalize(() => (this.saving = false))).subscribe({
       next: () => {
+        this.lookupsService.invalidate();
         this.message = this.editingId ? 'Category updated.' : 'Category created.';
         this.showForm = false;
         this.editingId = null;

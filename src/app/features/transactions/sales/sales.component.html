@@ -27,7 +27,7 @@
               <th>Total</th>
               <th>Paid</th>
               <th>Due</th>
-              <th>Profit</th>
+              <th>Profit <app-masked-profit></app-masked-profit></th>
               <th>Status</th>
               <th class="col-actions">Actions</th>
             </tr>
@@ -43,7 +43,7 @@
               <td>{{ s.grandTotal | number:'1.2-2' }}</td>
               <td>{{ s.paidAmount | number:'1.2-2' }}</td>
               <td>{{ s.balanceAmount | number:'1.2-2' }}</td>
-              <td class="text-success">{{ s.totalProfitAmount | number:'1.2-2' }}</td>
+              <td class="text-success"><app-masked-profit [value]="s.totalProfitAmount" [showToggle]="false"></app-masked-profit></td>
               <td>
                 <span class="badge"
                   [class.text-bg-success]="salePaymentStatus(s) === 1"
@@ -97,14 +97,14 @@
           <div class="info-item" *ngIf="$any(viewDetail['changeAmount']) > 0">
             <label>Return</label><span class="text-primary">{{ $any(viewDetail['changeAmount']) | number:'1.2-2' }}</span>
           </div>
-          <div class="info-item"><label>Profit</label><span class="text-success">{{ $any(viewDetail['totalProfitAmount']) | number:'1.2-2' }}</span></div>
+          <div class="info-item"><label>Profit</label><span class="text-success"><app-masked-profit [value]="$any(viewDetail['totalProfitAmount'])"></app-masked-profit></span></div>
           <div class="info-item"><label>Balance Due</label><span>{{ $any(viewDetail['balanceAmount']) | number:'1.2-2' }}</span></div>
         </div>
 
         <div class="data-table-wrap">
           <table class="data-table">
             <thead>
-              <tr><th>Product</th><th>SKU</th><th>Qty</th><th>Price</th><th>Total</th><th>Profit</th></tr>
+              <tr><th>Product</th><th>SKU</th><th>Qty</th><th>Price</th><th>Total</th><th>Profit <app-masked-profit></app-masked-profit></th></tr>
             </thead>
             <tbody>
               <tr *ngFor="let line of $any(viewDetail['lines'])">
@@ -113,7 +113,7 @@
                 <td>{{ line.quantity }}</td>
                 <td>{{ line.unitPrice | number:'1.2-2' }}</td>
                 <td>{{ line.lineTotal | number:'1.2-2' }}</td>
-                <td class="text-success">{{ line.lineProfit | number:'1.2-2' }}</td>
+                <td class="text-success"><app-masked-profit [value]="line.lineProfit" [showToggle]="false"></app-masked-profit></td>
               </tr>
             </tbody>
           </table>
@@ -189,9 +189,10 @@
                     (keydown.enter)="onQuickFieldEnter($event, 'saleDate')" />
                 </div>
                 <div class="col-6 col-md-3 col-lg-3">
-                  <label class="form-label">Location <span class="text-danger">*</span></label>
+                  <label class="form-label">Location</label>
                   <app-searchable-select formControlName="locationId" txnFocus="location"
-                    [items]="locationSelectOptions" placeholder="Choose..."
+                    [items]="locationSelectOptions" [nullable]="true" nullLabel="Default location"
+                    placeholder="Default location"
                     (openChange)="onHeaderSelectOpenChange($event)"
                     [disabled]="loadingLookups" (keydown.enter)="onQuickFieldEnter($event, 'location')" />
                 </div>
@@ -214,6 +215,7 @@
               <app-txn-product-browse
                 [open]="productBrowseOpen"
                 [products]="browseProducts"
+                [searchMode]="productSearchMode"
                 priceLabel="Price"
                 (closed)="closeProductBrowse()"
                 (selected)="onBrowseProductSelected($event)">
@@ -238,7 +240,8 @@
                   </thead>
                   <tbody>
                     <tr *ngFor="let i of displayLineIndices; let n = index" [formGroupName]="i"
-                      [class.pos-line--active]="activeLineIndex === i">
+                      [class.pos-line--active]="activeLineIndex === i"
+                      [class.pos-line--stock-error]="isLineStockExceeded(i)">
                       <td class="col-num text-muted">{{ n + 1 }}</td>
                       <td class="line-product-cell" [class.line-product-cell--search]="isTrailingEmptyRow(i)">
                         <ng-container *ngIf="isTrailingEmptyRow(i); else filledProductCell">
@@ -249,7 +252,7 @@
                                 id="sale-line-product-search"
                                 class="form-control line-product-search-input"
                                 data-txn-focus="product-search"
-                                placeholder="Search product — Enter to add"
+                                [placeholder]="productSearchPlaceholderText"
                                 [(ngModel)]="productSearch"
                                 [ngModelOptions]="{standalone: true}"
                                 (input)="onProductSearchInput()"
@@ -286,7 +289,9 @@
                                 [attr.aria-selected]="pi === highlightedProductIndex"
                                 (mousedown)="$event.preventDefault(); addProductFromPicker(p)">
                                 <span class="product-picker__name">{{ p.productName }}</span>
-                                <span class="product-picker__meta">{{ p.sku }} · Stock {{ p.currentStock }} · {{ p.sellingPrice | number:'1.2-2' }}</span>
+                                <span class="product-picker__meta">
+                                  <ng-container *ngIf="p.serialNo">#{{ p.serialNo }} · </ng-container>{{ p.sku }} · Stock {{ p.currentStock }} · {{ p.sellingPrice | number:'1.2-2' }}
+                                </span>
                               </li>
                             </ul>
                           </div>
@@ -300,12 +305,16 @@
                         <td class="col-qty">
                           <div class="line-qty-cell">
                             <input type="number" class="form-control form-control-sm" formControlName="quantity"
+                                   [class.is-invalid]="isLineStockExceeded(i)"
                                    [attr.data-line-index]="i" data-line-field="quantity"
                                    step="1" min="1" (input)="onQuantityChanged(i)" (focus)="onLineFocus(i)"
                                    (keydown)="onLineFieldKeydown($event, i)"
                                    (keydown.enter)="$event.preventDefault(); onLineEnter(i, 'quantity')"
                                    (keydown.tab)="onLineTab(i, 'quantity', $event)" />
-                            <span class="line-avl">Avl {{ productStock(lines.at(i).get('productId')?.value) | number:'1.0-2' }}</span>
+                            <span class="line-avl" [class.line-avl--danger]="isLineStockExceeded(i)">
+                              {{ isLineStockExceeded(i) ? 'Short!' : 'Avl' }}
+                              {{ productStock(lines.at(i).get('productId')?.value) | number:'1.0-2' }}
+                            </span>
                           </div>
                         </td>
                         <td class="col-price">
@@ -441,10 +450,16 @@
             <p class="hint-text">{{ paymentModeLabel }}</p>
 
             <div class="form-footer flex-column">
-              <button class="btn btn-success w-100 pos-save-btn" type="button" data-txn-focus="save"
+              <div class="alert alert-danger py-2 px-2 mb-2 small" *ngIf="hasInsufficientStock">
+                {{ stockBlockMessage }}
+              </div>
+              <button class="btn w-100 pos-save-btn" type="button" data-txn-focus="save"
+                [class.btn-success]="canSaveSale"
+                [class.btn-outline-secondary]="!canSaveSale"
                 (click)="requestSave()"
-                [disabled]="saving || grandTotal <= 0" title="Save (Ctrl+S)">
-                {{ saving ? 'Saving...' : 'Save Sale' }}
+                [disabled]="!canSaveSale"
+                [title]="hasInsufficientStock ? 'Fix stock shortage first' : 'Save (Ctrl+S)'">
+                {{ saving ? 'Saving...' : (hasInsufficientStock ? 'Cannot save — stock short' : 'Save Sale') }}
               </button>
               <button class="btn btn-secondary w-100" type="button" (click)="cancel()" [disabled]="saving" title="Back to list (Esc)">Cancel</button>
               <button class="btn btn-outline-danger w-100" type="button" (click)="clearAll()" [disabled]="saving">Clear All</button>

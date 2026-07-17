@@ -2,16 +2,17 @@ import { Component, ChangeDetectorRef, ElementRef, HostListener, OnDestroy, OnIn
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { FormArray, FormBuilder, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
-import { finalize, switchMap, of, map } from 'rxjs';
+import { finalize, switchMap, of, map, Subject, debounceTime, distinctUntilChanged, takeUntil } from 'rxjs';
 import { ApiService } from '../../../core/services/api.service';
 import { ExportPrintService } from '../../../core/services/export-print.service';
 import { SaleReceiptService } from '../../../core/services/sale-receipt.service';
+import { LookupsService } from '../../../core/services/lookups.service';
 import {
   SaleHoldFormValue,
   TxnHoldDraft,
   TxnHoldService
 } from '../../../core/services/txn-hold.service';
-import { getApiErrorMessage, LookupsDto, PaginatedList } from '../../../core/models/api.models';
+import { getApiErrorMessage, PaginatedList } from '../../../core/models/api.models';
 import {
   adjacentPaymentMode,
   buildProductShortKeyMap,
@@ -28,6 +29,13 @@ import {
 import { formatAppDate, todayIsoDate } from '../../../core/utils/date-format';
 import { ListPagination } from '../../../core/utils/list-pagination';
 import { resolveTxnPaymentStatus, txnPaymentStatusLabel } from '../../../core/utils/txn-payment-status';
+import {
+  filterProductsBySearchMode,
+  parseProductSearchMode,
+  productSearchPlaceholder,
+  ProductSearchMode,
+  resolveProductBySearchMode
+} from '../../../core/utils/product-search';
 import { mapNamedOptions, SearchableSelectOption } from '../../../shared/components/searchable-select/searchable-select.models';
 import { TxnBrowseProduct } from '../shared/txn-product-browse.component';
 
@@ -50,6 +58,7 @@ interface ProductOption {
   sellingPrice: number;
   currentStock: number;
   shortKey?: string | null;
+  serialNo?: string | null;
 }
 
 interface NamedOption {
@@ -86,7 +95,9 @@ export class SalesComponent implements OnInit, OnDestroy {
   defaultTaxRate = 0;
   taxManuallyEdited = false;
   enableProductShortKeys = false;
+  productSearchMode: ProductSearchMode = 'Both';
   autoPrintSaleReceipt = true;
+  allowNegativeStock = false;
   pendingPrintSaleId: number | null = null;
 
   loading = false;
@@ -112,6 +123,9 @@ export class SalesComponent implements OnInit, OnDestroy {
   productPickerOpen = false;
   highlightedProductIndex = -1;
   productBrowseOpen = false;
+  private productsLoading = false;
+  private readonly destroy$ = new Subject<void>();
+  private readonly productQuery$ = new Subject<string>();
   resolvingProductSearch = false;
   lineProductPickerStyle: Record<string, string> = {};
 
@@ -136,13 +150,14 @@ export class SalesComponent implements OnInit, OnDestroy {
     private exportPrint: ExportPrintService,
     private saleReceipt: SaleReceiptService,
     private txnHold: TxnHoldService,
+    private lookupsService: LookupsService,
     private cdr: ChangeDetectorRef,
     private sanitizer: DomSanitizer
   ) {
     this.form = this.fb.group({
       customerId: [null as number | null],
       saleDate: [todayIsoDate(), Validators.required],
-      locationId: [null as number | null, Validators.required],
+      locationId: [null as number | null],
       discountAmount: [0, [Validators.min(0)]],
       taxAmount: [0, [Validators.min(0)]],
       remarks: [''],
@@ -157,14 +172,16 @@ export class SalesComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.loadLookups();
-    this.loadProducts();
     this.loadAppSettings();
     this.loadCompanyProfile();
+    this.bindProductTypeahead();
     this.route.queryParams.subscribe(() => this.resolveViewFromRoute());
   }
 
   ngOnDestroy(): void {
     this.persistActiveDraft();
+    this.destroy$.next();
+    this.destroy$.complete();
   }
 
   @HostListener('window:scroll')
@@ -311,11 +328,11 @@ export class SalesComponent implements OnInit, OnDestroy {
   }
 
   get filteredProducts(): ProductOption[] {
-    const q = this.productSearch.trim().toLowerCase();
-    if (!q) return this.products;
-    return this.products.filter(
-      p => p.productName.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q)
-    );
+    return filterProductsBySearchMode(this.products, this.productSearch, this.productSearchMode);
+  }
+
+  get productSearchPlaceholderText(): string {
+    return productSearchPlaceholder(this.productSearchMode);
   }
 
   get pickerProducts(): ProductOption[] {
@@ -332,6 +349,7 @@ export class SalesComponent implements OnInit, OnDestroy {
       productId: p.productId,
       productName: p.productName,
       sku: p.sku,
+      serialNo: p.serialNo ?? null,
       stock: p.currentStock,
       price: p.sellingPrice
     }));
@@ -438,10 +456,73 @@ export class SalesComponent implements OnInit, OnDestroy {
 
   onQuantityChanged(index: number): void {
     this.ensureTrailingEmptyLine();
+    this.refreshStockWarning();
+  }
+
+  /** Total qty for a product across all sale lines. */
+  totalQtyForProduct(productId: number): number {
+    if (!productId) return 0;
+    let sum = 0;
+    for (let i = 0; i < this.lines.length; i++) {
+      if (this.isTrailingEmptyRow(i)) continue;
+      if (Number(this.lines.at(i).get('productId')?.value) === productId) {
+        sum += Number(this.lines.at(i).get('quantity')?.value || 0);
+      }
+    }
+    return sum;
+  }
+
+  isLineStockExceeded(index: number): boolean {
+    if (this.allowNegativeStock || this.isTrailingEmptyRow(index)) return false;
+    const productId = Number(this.lines.at(index).get('productId')?.value);
+    if (!productId) return false;
+    const available = this.productStock(productId);
+    const needed = this.totalQtyForProduct(productId);
+    return needed > available + 1e-9;
+  }
+
+  get hasInsufficientStock(): boolean {
+    if (this.allowNegativeStock) return false;
+    return this.filledLineIndices.some(i => this.isLineStockExceeded(i));
+  }
+
+  get canSaveSale(): boolean {
+    return !this.saving && this.grandTotal > 0 && this.filledLineIndices.length > 0 && !this.hasInsufficientStock;
+  }
+
+  get stockBlockMessage(): string {
+    if (!this.hasInsufficientStock) return '';
+    const seen = new Set<number>();
+    const parts: string[] = [];
+    for (const i of this.filledLineIndices) {
+      if (!this.isLineStockExceeded(i)) continue;
+      const productId = Number(this.lines.at(i).get('productId')?.value);
+      if (!productId || seen.has(productId)) continue;
+      seen.add(productId);
+      const name = this.productLabel(productId) || 'Item';
+      const available = this.productStock(productId);
+      const needed = this.totalQtyForProduct(productId);
+      parts.push(`${name} (need ${needed}, available ${available})`);
+    }
+    return parts.length
+      ? `Not enough stock: ${parts.join('; ')}. Lower Qty or remove the row — sale cannot be saved.`
+      : 'Not enough stock on one or more lines. Lower Qty or remove the row.';
+  }
+
+  private refreshStockWarning(): void {
+    if (this.hasInsufficientStock) {
+      this.message = '';
+      this.errorMessage = this.stockBlockMessage;
+      return;
+    }
+    if (this.errorMessage && this.errorMessage.startsWith('Not enough stock')) {
+      this.errorMessage = '';
+    }
   }
 
   onProductSearchInput(): void {
     this.productPickerOpen = true;
+    this.productQuery$.next(this.productSearch.trim());
     this.highlightedProductIndex = this.pickerProducts.length > 0 ? 0 : -1;
     this.scheduleLineProductPickerPosition();
   }
@@ -503,22 +584,7 @@ export class SalesComponent implements OnInit, OnDestroy {
   }
 
   private findLocalProduct(query: string): ProductOption | undefined {
-    const n = query.trim().toLowerCase();
-    if (!n) return undefined;
-
-    const exact = this.products.find(
-      p => p.productName.toLowerCase() === n || p.sku.toLowerCase() === n
-    );
-    if (exact) return exact;
-
-    const starts = this.products.find(
-      p => p.productName.toLowerCase().startsWith(n) || p.sku.toLowerCase().startsWith(n)
-    );
-    if (starts) return starts;
-
-    return this.products.find(
-      p => p.productName.toLowerCase().includes(n) || p.sku.toLowerCase().includes(n)
-    );
+    return resolveProductBySearchMode(this.products, query, this.productSearchMode);
   }
 
   onProductSearchKeydown(event: KeyboardEvent): void {
@@ -557,6 +623,7 @@ export class SalesComponent implements OnInit, OnDestroy {
 
   private openProductPicker(): void {
     this.productPickerOpen = true;
+    this.ensureProductsLoaded();
     this.highlightedProductIndex = this.filteredProducts.length > 0 ? 0 : -1;
     this.scheduleLineProductPickerPosition();
   }
@@ -571,6 +638,7 @@ export class SalesComponent implements OnInit, OnDestroy {
   onLineProductSearchFocus(): void {
     const idx = this.trailingLineIndex;
     if (idx >= 0) this.activeLineIndex = idx;
+    this.ensureProductsLoaded();
     this.scheduleLineProductPickerPosition();
   }
 
@@ -619,6 +687,7 @@ export class SalesComponent implements OnInit, OnDestroy {
       const line = this.lines.at(existingIdx);
       line.patchValue({ quantity: Number(line.get('quantity')?.value || 0) + 1 });
       this.dismissProductPicker();
+      this.refreshStockWarning();
       this.cdr.detectChanges();
       this.focusLineAfterAdd(existingIdx);
       return;
@@ -633,6 +702,7 @@ export class SalesComponent implements OnInit, OnDestroy {
     });
     this.ensureTrailingEmptyLine();
     this.dismissProductPicker();
+    this.refreshStockWarning();
     this.cdr.detectChanges();
     this.focusLineAfterAdd(idx);
   }
@@ -649,7 +719,11 @@ export class SalesComponent implements OnInit, OnDestroy {
     this.resolvingProductSearch = true;
     this.errorMessage = '';
     this.api
-      .get<PaginatedList<Record<string, unknown>>>('/products', { search: q, pageSize: 25 })
+      .get<PaginatedList<Record<string, unknown>>>('/products', {
+        search: q,
+        pageSize: 25,
+        searchMode: this.productSearchMode
+      })
       .pipe(finalize(() => (this.resolvingProductSearch = false)))
       .subscribe({
         next: res => {
@@ -675,6 +749,12 @@ export class SalesComponent implements OnInit, OnDestroy {
 
   onLineEnter(index: number, field: 'quantity' | 'unitPrice'): void {
     if (field === 'quantity') {
+      this.refreshStockWarning();
+      if (this.isLineStockExceeded(index)) {
+        this.activeLineIndex = index;
+        focusLineField(index, 'quantity');
+        return;
+      }
       this.activeLineIndex = index;
       focusLineField(index, this.linePriceField);
       return;
@@ -758,7 +838,8 @@ export class SalesComponent implements OnInit, OnDestroy {
       sku: String(raw['sku'] ?? raw['Sku'] ?? '').trim(),
       sellingPrice: Number(raw['sellingPrice'] ?? raw['SellingPrice'] ?? 0),
       currentStock: Number(raw['currentStock'] ?? raw['CurrentStock'] ?? 0),
-      shortKey: (raw['shortKey'] ?? raw['ShortKey'] ?? null) as string | null
+      shortKey: (raw['shortKey'] ?? raw['ShortKey'] ?? null) as string | null,
+      serialNo: (raw['serialNo'] ?? raw['SerialNo'] ?? null) as string | null
     };
   }
 
@@ -877,6 +958,7 @@ export class SalesComponent implements OnInit, OnDestroy {
       this.lines.push(this.createLine());
     }
     this.ensureTrailingEmptyLine();
+    this.refreshStockWarning();
   }
 
   private removeLineViaKeyboard(index: number, field: string): void {
@@ -948,8 +1030,12 @@ export class SalesComponent implements OnInit, OnDestroy {
         if (footer?.settingValue) this.invoiceFooter = footer.settingValue;
         const shortKeys = settings.find(s => s.settingKey === 'EnableProductShortKeys');
         this.enableProductShortKeys = shortKeys?.settingValue === 'true';
+        const searchMode = settings.find(s => s.settingKey === 'ProductSearchMode');
+        this.productSearchMode = parseProductSearchMode(searchMode?.settingValue);
         const autoPrint = settings.find(s => s.settingKey === 'AutoPrintSaleReceipt');
         this.autoPrintSaleReceipt = autoPrint?.settingValue !== 'false';
+        const neg = settings.find(s => s.settingKey === 'AllowNegativeStock');
+        this.allowNegativeStock = neg?.settingValue?.toLowerCase() === 'true';
       }
     });
     this.saleReceipt.loadSettings().subscribe();
@@ -1011,7 +1097,25 @@ export class SalesComponent implements OnInit, OnDestroy {
 
   printView(): void {
     if (!this.viewId) return;
-    this.openReceiptPreview(this.viewId);
+    const saleId = this.viewId;
+    this.message = 'Printing…';
+    this.errorMessage = '';
+    this.saleReceipt.printSaleReceipt(saleId).subscribe({
+      next: result => {
+        if (result.printed) {
+          this.message = result.message || 'Receipt printed.';
+          return;
+        }
+        this.message = '';
+        this.errorMessage = result.message || 'Printer unavailable.';
+        this.openReceiptPreview(saleId);
+      },
+      error: err => {
+        this.message = '';
+        this.errorMessage = getApiErrorMessage(err, 'Print failed.');
+        this.openReceiptPreview(saleId);
+      }
+    });
   }
 
   closeReceiptPreview(): void {
@@ -1157,24 +1261,57 @@ export class SalesComponent implements OnInit, OnDestroy {
   }
 
   loadProducts(): void {
-    this.api.get<PaginatedList<Record<string, unknown>>>('/products', { pageSize: 2000 }).subscribe({
-      next: res => {
-        this.products = (res.data?.items ?? [])
-          .map(item => this.mapProduct(item))
-          .filter((p): p is ProductOption => p !== null);
-        this.highlightedProductIndex = this.pickerProducts.length > 0 ? 0 : -1;
-      }
-    });
+    this.ensureProductsLoaded(true);
+  }
+
+  /** Small catalog for POS — never dump thousands of rows over the LAN. */
+  private ensureProductsLoaded(force = false): void {
+    if (!force && (this.products.length > 0 || this.productsLoading)) return;
+    this.productsLoading = true;
+    this.api
+      .get<PaginatedList<Record<string, unknown>>>('/products', { pageSize: 200 })
+      .pipe(finalize(() => (this.productsLoading = false)))
+      .subscribe({
+        next: res => {
+          this.products = (res.data?.items ?? [])
+            .map(item => this.mapProduct(item))
+            .filter((p): p is ProductOption => p !== null);
+          this.highlightedProductIndex = this.pickerProducts.length > 0 ? 0 : -1;
+        }
+      });
+  }
+
+  private bindProductTypeahead(): void {
+    this.productQuery$
+      .pipe(
+        debounceTime(200),
+        distinctUntilChanged(),
+        switchMap(q =>
+          this.api.get<PaginatedList<Record<string, unknown>>>('/products', {
+            ...(q ? { search: q, searchMode: this.productSearchMode } : {}),
+            pageSize: q ? 50 : 200
+          })
+        ),
+        takeUntil(this.destroy$)
+      )
+      .subscribe({
+        next: res => {
+          this.products = (res.data?.items ?? [])
+            .map(item => this.mapProduct(item))
+            .filter((p): p is ProductOption => p !== null);
+          this.highlightedProductIndex = this.pickerProducts.length > 0 ? 0 : -1;
+          this.scheduleLineProductPickerPosition();
+        }
+      });
   }
 
   loadLookups(): void {
     this.loadingLookups = true;
-    this.api
-      .get<LookupsDto>('/lookups')
+    this.lookupsService
+      .getLookups()
       .pipe(finalize(() => (this.loadingLookups = false)))
       .subscribe({
-        next: res => {
-          const data = res.data;
+        next: data => {
           if (!data) return;
           this.customers = this.normalize(data.customers);
           this.locations = this.normalize(data.locations);
@@ -1263,7 +1400,6 @@ export class SalesComponent implements OnInit, OnDestroy {
     });
     this.lines.clear();
     this.lines.push(this.createLine());
-    this.loadProducts();
     this.syncPaymentsFromMode();
     this.syncAutoTax();
     setTimeout(() => this.focusCustomerField(), 0);
@@ -1328,6 +1464,10 @@ export class SalesComponent implements OnInit, OnDestroy {
   }
 
   closeView(): void {
+    if (this.route.snapshot.queryParams['from'] === 'reports') {
+      this.router.navigate(['/reports']);
+      return;
+    }
     this.openList();
   }
 
@@ -1396,6 +1536,12 @@ export class SalesComponent implements OnInit, OnDestroy {
   requestSave(event?: Event): void {
     event?.preventDefault();
     if (this.saving || this.showSaveConfirm) return;
+    if (!this.canSaveSale) {
+      if (this.hasInsufficientStock) {
+        this.refreshStockWarning();
+      }
+      return;
+    }
     if (!this.validateForSave()) return;
     this.showSaveConfirm = true;
   }
@@ -1416,10 +1562,13 @@ export class SalesComponent implements OnInit, OnDestroy {
 
   private validateForSave(): boolean {
     const v = this.form.getRawValue();
-    if (!v.locationId) {
-      this.form.markAllAsTouched();
-      this.errorMessage = 'Please select store location.';
+    const locationId = this.resolveLocationId(v.locationId);
+    if (!locationId) {
+      this.errorMessage = 'No store location is available. Add a location in Setup first.';
       return false;
+    }
+    if (!v.locationId) {
+      this.form.patchValue({ locationId }, { emitEvent: false });
     }
 
     if (this.balanceTotal > 0 && !v.customerId && !this.pendingCustomerName?.trim()) {
@@ -1450,6 +1599,11 @@ export class SalesComponent implements OnInit, OnDestroy {
       return false;
     }
 
+    if (this.hasInsufficientStock) {
+      this.refreshStockWarning();
+      return false;
+    }
+
     this.errorMessage = '';
     return true;
   }
@@ -1457,32 +1611,28 @@ export class SalesComponent implements OnInit, OnDestroy {
   private finishAfterSave(saleId: number, wantsPrint: boolean, baseMessage: string): void {
     if (!(saleId > 0 && wantsPrint)) {
       this.startNewFormAfterSave(baseMessage);
-      setTimeout(() => this.loadProducts(), 0);
       return;
     }
 
-    // Print on thermal first, then reset form — so Sale & Print always hits the printer.
-    this.message = `${baseMessage} Printing…`;
-    this.errorMessage = '';
+    // Ready for the next sale immediately — thermal print continues in the background.
+    this.startNewFormAfterSave(`${baseMessage} Printing…`);
 
     this.saleReceipt.printSaleReceipt(saleId).subscribe({
       next: result => {
         if (result.printed) {
-          this.startNewFormAfterSave(`${baseMessage} Receipt printed.`);
-          setTimeout(() => this.loadProducts(), 0);
+          this.message = `${baseMessage} Receipt printed.`;
           return;
         }
 
-        // Thermal unavailable / failed — show HTML preview so cashier can still print.
-        this.message = `${baseMessage} ${result.message || 'Opening receipt preview…'}`;
+        // No thermal config / not supported — open HTML preview as fallback.
+        this.message = baseMessage;
+        this.errorMessage = result.message || 'Printer unavailable.';
         this.openReceiptPreview(saleId);
-        setTimeout(() => this.loadProducts(), 0);
       },
       error: err => {
         this.message = baseMessage;
         this.errorMessage = getApiErrorMessage(err, 'Print failed.');
         this.openReceiptPreview(saleId);
-        setTimeout(() => this.loadProducts(), 0);
       }
     });
   }
@@ -1516,6 +1666,7 @@ export class SalesComponent implements OnInit, OnDestroy {
       .pipe(
         switchMap(customerId => {
           if (pendingName && customerId) {
+            this.lookupsService.invalidate();
             this.customers = [...this.customers, { id: customerId, name: pendingName }].sort((a, b) =>
               a.name.localeCompare(b.name)
             );
@@ -1525,7 +1676,7 @@ export class SalesComponent implements OnInit, OnDestroy {
           const body = {
             customerId,
             saleDate: v.saleDate,
-            locationId: Number(v.locationId),
+            locationId: this.resolveLocationId(v.locationId)!,
             discountAmount: Number(v.discountAmount || 0),
             taxAmount: Number(v.taxAmount || 0),
             remarks: v.remarks || null,
@@ -1544,6 +1695,8 @@ export class SalesComponent implements OnInit, OnDestroy {
         next: res => {
           this.showSaveConfirm = false;
           this.saveWithPrint = false;
+          // Drop sold qty from cached catalog so the next sale sees fresh stock immediately.
+          this.applySoldStock(lines);
           const saleId = Number(res.data);
           this.finishAfterSave(saleId, wantsPrint, 'Sale saved successfully.');
         },
@@ -1553,5 +1706,34 @@ export class SalesComponent implements OnInit, OnDestroy {
           this.errorMessage = getApiErrorMessage(err, 'Save failed.');
         }
       });
+  }
+
+  /** Prefer selected location; otherwise default settings / only location. */
+  private resolveLocationId(selected: unknown): number | null {
+    const picked = Number(selected);
+    if (picked > 0) return picked;
+    if (this.defaultLocationId && this.defaultLocationId > 0) return this.defaultLocationId;
+    if (this.locations.length === 1) return this.locations[0].id;
+    if (this.locations.length > 0) return this.locations[0].id;
+    return null;
+  }
+
+  /** Update POS product cache after a successful sale (prevents stale Avl / stock checks). */
+  private applySoldStock(lines: Array<{ productId: number; quantity: number }>): void {
+    if (!lines.length || !this.products.length) return;
+
+    const sold = new Map<number, number>();
+    for (const line of lines) {
+      sold.set(line.productId, (sold.get(line.productId) ?? 0) + Number(line.quantity || 0));
+    }
+
+    this.products = this.products.map(p => {
+      const qty = sold.get(p.productId);
+      if (!qty) return p;
+      return {
+        ...p,
+        currentStock: Math.max(0, Number(p.currentStock || 0) - qty)
+      };
+    });
   }
 }

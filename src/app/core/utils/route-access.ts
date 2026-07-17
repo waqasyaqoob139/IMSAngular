@@ -1,9 +1,9 @@
 import { PERMISSIONS } from '../models/permissions';
 
-/** First landing route when a permission is granted (menu priority). */
+/** First landing route when a permission is granted (menu priority). POS-first for cashiers. */
 const PERMISSION_HOME_ROUTES: { permission: string; route: string }[] = [
-  { permission: PERMISSIONS.dashboard, route: '/dashboard' },
   { permission: PERMISSIONS.sales, route: '/transactions/sales' },
+  { permission: PERMISSIONS.dashboard, route: '/dashboard' },
   { permission: PERMISSIONS.purchases, route: '/transactions/purchases' },
   { permission: PERMISSIONS.payments, route: '/transactions/customer-payments' },
   { permission: PERMISSIONS.expenses, route: '/transactions/expenses' },

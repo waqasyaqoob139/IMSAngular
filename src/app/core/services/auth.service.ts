@@ -2,6 +2,7 @@ import { Injectable, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { tap } from 'rxjs';
 import { ApiService } from './api.service';
+import { LookupsService } from './lookups.service';
 import { LoginResponse } from '../models/api.models';
 import {
   PermissionCode,
@@ -24,9 +25,16 @@ export class AuthService {
 
   readonly currentUser = signal<LoginResponse | null>(this.loadUser());
 
-  constructor(private api: ApiService, private router: Router) {
+  constructor(
+    private api: ApiService,
+    private router: Router,
+    private lookups: LookupsService
+  ) {
     if (this.isLoggedIn() && !this.currentUser()?.permissions?.length) {
       this.refreshProfile().subscribe();
+    }
+    if (this.isLoggedIn()) {
+      this.lookups.prefetch();
     }
   }
 
@@ -35,6 +43,8 @@ export class AuthService {
       tap(res => {
         if (res.success && res.data) {
           this.persistUser(res.data);
+          this.lookups.invalidate();
+          this.lookups.prefetch();
         }
       })
     );
@@ -70,6 +80,7 @@ export class AuthService {
     localStorage.removeItem(this.tokenKey);
     localStorage.removeItem(this.userKey);
     this.currentUser.set(null);
+    this.lookups.invalidate();
     this.router.navigate(['/login']);
   }
 

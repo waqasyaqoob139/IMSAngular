@@ -25,6 +25,8 @@ export class MainLayoutComponent implements OnInit, OnDestroy {
   searchTerm = '';
   searchOpen = false;
   searchResult: SearchResult | null = null;
+  /** After clicking a menu link, keep hover menus closed until the pointer leaves the nav. */
+  navMenusLocked = false;
   private draftsSub?: Subscription;
 
   constructor(
@@ -43,6 +45,20 @@ export class MainLayoutComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.draftsSub?.unsubscribe();
+  }
+
+  onNavMenuClick(event: MouseEvent): void {
+    const target = event.target as HTMLElement | null;
+    if (!target?.closest('a.dropdown-item, a.nav-link')) return;
+    this.navMenusLocked = true;
+    // Also close any Bootstrap "show" state from click-toggles.
+    document.querySelectorAll('.app-nav-menu .dropdown-menu.show').forEach(el => {
+      el.classList.remove('show');
+    });
+    document.querySelectorAll('.app-nav-menu .dropdown-toggle.show').forEach(el => {
+      el.classList.remove('show');
+      el.setAttribute('aria-expanded', 'false');
+    });
   }
 
   get user() {

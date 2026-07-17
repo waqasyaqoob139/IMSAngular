@@ -12,9 +12,41 @@
     </div>
 
     <div class="content-panel">
-      <div class="toolbar">
-        <input class="form-control" placeholder="Search name, SKU, barcode..." [(ngModel)]="search" (keyup.enter)="onSearch()" />
-        <button class="btn btn-outline-secondary" (click)="onSearch()" [disabled]="loading">Search</button>
+      <div class="product-filters">
+        <div class="product-filters__field">
+          <label class="form-label">Product</label>
+          <input
+            class="form-control form-control-sm"
+            placeholder="Name..."
+            [(ngModel)]="filterProductName"
+            (keyup.enter)="onSearch()" />
+        </div>
+        <div class="product-filters__field product-filters__field--serial">
+          <label class="form-label">Serial #</label>
+          <input
+            class="form-control form-control-sm"
+            placeholder="e.g. 01"
+            [(ngModel)]="filterSerialNo"
+            (keyup.enter)="onSearch()" />
+        </div>
+        <div class="product-filters__field product-filters__field--category">
+          <label class="form-label">Category</label>
+          <app-searchable-select
+            [(ngModel)]="filterCategoryId"
+            [small]="true"
+            [nullable]="true"
+            nullLabel="All categories"
+            [items]="categorySelectOptions"
+            placeholder="All categories" />
+        </div>
+        <div class="product-filters__actions">
+          <button class="btn btn-outline-secondary btn-sm" type="button" (click)="onSearch()" [disabled]="loading">
+            Search
+          </button>
+          <button class="btn btn-outline-secondary btn-sm" type="button" (click)="clearFilters()" [disabled]="loading">
+            Clear
+          </button>
+        </div>
       </div>
 
       <div class="bulk-upload" *ngIf="enableProductBulkUpload">
@@ -50,6 +82,7 @@
         <table class="data-table">
           <thead>
             <tr>
+              <th>Serial</th>
               <th>SKU</th>
               <th>Key</th>
               <th>Name</th>
@@ -62,9 +95,10 @@
           </thead>
           <tbody>
             <tr *ngIf="products.length === 0" class="empty-row">
-              <td colspan="8">No products found.</td>
+              <td colspan="9">No products found.</td>
             </tr>
             <tr *ngFor="let p of products">
+              <td><strong>{{ p.serialNo || '—' }}</strong></td>
               <td>{{ p.sku }}</td>
               <td><span *ngIf="p.shortKey" class="badge text-bg-light border">{{ p.shortKey }}</span></td>
               <td>{{ p.productName }}</td>
@@ -104,9 +138,14 @@
     <div class="form-panel">
       <div *ngIf="loadingDetail" class="loading-row">Loading product...</div>
 
-      <form *ngIf="!loadingDetail" [formGroup]="form" (ngSubmit)="save()" appSaveShortcut
-        [saveShortcutActive]="!saving" (saveShortcut)="save()">
+      <form [formGroup]="form" (ngSubmit)="save()" appSaveShortcut
+        [saveShortcutActive]="!saving && !loadingDetail" (saveShortcut)="save()">
         <div class="row g-2">
+          <div class="col-md-2">
+            <label class="form-label">Serial #</label>
+            <input class="form-control" formControlName="serialNo" maxlength="10" placeholder="Auto e.g. 01" />
+            <small class="text-muted">Short code for search (01, 02…)</small>
+          </div>
           <div class="col-md-3">
             <label class="form-label">Barcode</label>
             <input class="form-control" formControlName="barcode" />
@@ -115,7 +154,7 @@
             <label class="form-label">SKU</label>
             <input class="form-control" formControlName="sku" placeholder="Optional — auto-generated if empty" />
           </div>
-          <div class="col-md-6">
+          <div class="col-md-4">
             <label class="form-label">Product Name *</label>
             <input class="form-control" formControlName="productName" />
           </div>

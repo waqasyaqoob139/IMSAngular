@@ -18,6 +18,14 @@ export class ApiService {
     return this.http.post<ApiResponse<T>>(`${this.baseUrl}${url}`, body);
   }
 
+  postForm<T>(url: string, formData: FormData): Observable<ApiResponse<T>> {
+    return this.http.post<ApiResponse<T>>(`${this.baseUrl}${url}`, formData);
+  }
+
+  getBlob(url: string): Observable<Blob> {
+    return this.http.get(`${this.baseUrl}${url}`, { responseType: 'blob' });
+  }
+
   put<T>(url: string, body: unknown): Observable<ApiResponse<T>> {
     return this.http.put<ApiResponse<T>>(`${this.baseUrl}${url}`, body);
   }

@@ -69,6 +69,12 @@ export class SettingsComponent implements OnInit {
     { value: 'false', label: 'No' }
   ];
 
+  readonly productSearchModeOptions: SearchableSelectOption[] = [
+    { value: 'Name', label: 'Search by product name' },
+    { value: 'Serial', label: 'Search by serial number' },
+    { value: 'Both', label: 'Search by name or serial' }
+  ];
+
   get costingMethodOptions(): SearchableSelectOption[] {
     return this.costingMethods.map(m => ({ value: m.id, label: m.name }));
   }
@@ -140,21 +146,6 @@ export class SettingsComponent implements OnInit {
     return this.appSettings.find(s => s.settingKey === 'DatabaseBackupPath');
   }
 
-  get autoBackupEnabledSetting(): AppSetting | undefined {
-    return this.appSettings.find(s => s.settingKey === 'DatabaseBackupAutoEnabled');
-  }
-
-  get autoBackupTimeSetting(): AppSetting | undefined {
-    return this.appSettings.find(s => s.settingKey === 'DatabaseBackupAutoTime');
-  }
-
-  get lastAutoBackupLabel(): string {
-    const raw = this.appSettings.find(s => s.settingKey === 'DatabaseBackupLastAutoRun')?.settingValue?.trim();
-    if (!raw) return 'Never';
-    const [datePart, timePart] = raw.split('|');
-    return timePart ? `${datePart} at ${timePart}` : raw;
-  }
-
   printSetting(key: string): AppSetting | undefined {
     return this.appSettings.find(s => s.settingKey === key);
   }
@@ -217,32 +208,6 @@ export class SettingsComponent implements OnInit {
           settingValue: 'D:\\InvDB.bak',
           category: 'System',
           description: 'Database backup file path'
-        }
-      ];
-    }
-
-    if (!this.appSettings.some(s => s.settingKey === 'DatabaseBackupAutoEnabled')) {
-      this.appSettings = [
-        ...this.appSettings,
-        {
-          settingId: 0,
-          settingKey: 'DatabaseBackupAutoEnabled',
-          settingValue: 'false',
-          category: 'System',
-          description: 'Enable daily automatic database backup'
-        }
-      ];
-    }
-
-    if (!this.appSettings.some(s => s.settingKey === 'DatabaseBackupAutoTime')) {
-      this.appSettings = [
-        ...this.appSettings,
-        {
-          settingId: 0,
-          settingKey: 'DatabaseBackupAutoTime',
-          settingValue: '23:00',
-          category: 'System',
-          description: 'Daily automatic backup time (HH:mm)'
         }
       ];
     }
@@ -368,6 +333,7 @@ export class SettingsComponent implements OnInit {
       DefaultLocationId: 'Default store location ID',
       AllowNegativeStock: 'Allow selling without stock',
       EnableProductShortKeys: 'Product short keys on sale/purchase',
+      ProductSearchMode: 'Sale/purchase product search',
       EnableProductBulkUpload: 'Product sheet uploader on Products page',
       CostingMethodLocked: 'Inventory costing locked',
       DatabaseBackupPath: 'Database backup file path'
@@ -383,12 +349,22 @@ export class SettingsComponent implements OnInit {
       || key === 'AutoPrintSaleReceipt';
   }
 
+  isProductSearchModeSetting(key: string): boolean {
+    return key === 'ProductSearchMode';
+  }
+
   isPaperWidthSetting(key: string): boolean {
     return key === 'ThermalPaperWidthMm';
   }
 
   isPrinterNameSetting(key: string): boolean {
     return key === 'ThermalPrinterName';
+  }
+
+  isPrinterInstalled(name: string | null | undefined): boolean {
+    const n = (name ?? '').trim();
+    if (!n) return false;
+    return this.installedPrinters.some(p => p.localeCompare(n, undefined, { sensitivity: 'accent' }) === 0);
   }
 
   saveBackupPath(): void {
@@ -417,58 +393,6 @@ export class SettingsComponent implements OnInit {
         next: () => (this.message = 'Backup path saved.'),
         error: err => (this.errorMessage = getApiErrorMessage(err, 'Save failed.'))
       });
-  }
-
-  saveAutoBackupSettings(): void {
-    const enabled = this.autoBackupEnabledSetting;
-    const time = this.autoBackupTimeSetting;
-    if (!enabled || !time) return;
-
-    const normalizedTime = this.normalizeBackupTime(time.settingValue);
-    if (!normalizedTime) {
-      this.errorMessage = 'Enter auto-backup time as HH:mm (for example 18:24).';
-      return;
-    }
-
-    enabled.settingValue = String(enabled.settingValue).toLowerCase() === 'true' ? 'true' : 'false';
-    time.settingValue = normalizedTime;
-
-    this.saving = true;
-    this.message = '';
-    this.errorMessage = '';
-    this.api
-      .put('/settings/app-settings', {
-        settings: [
-          { settingKey: 'DatabaseBackupAutoEnabled', settingValue: enabled.settingValue },
-          { settingKey: 'DatabaseBackupAutoTime', settingValue: time.settingValue },
-          // Clear last-run so the new schedule can fire today (for re-tests / time changes).
-          { settingKey: 'DatabaseBackupLastAutoRun', settingValue: '' }
-        ]
-      })
-      .pipe(finalize(() => (this.saving = false)))
-      .subscribe({
-        next: () => {
-          const last = this.appSettings.find(s => s.settingKey === 'DatabaseBackupLastAutoRun');
-          if (last) last.settingValue = '';
-          this.message = enabled.settingValue === 'true'
-            ? `Auto backup scheduled at ${time.settingValue}. It will run within about 1 minute if that time has already passed today.`
-            : 'Auto backup disabled.';
-        },
-        error: err => (this.errorMessage = getApiErrorMessage(err, 'Save failed.'))
-      });
-  }
-
-  /** HTML time inputs often send HH:mm:ss — normalize to HH:mm. */
-  private normalizeBackupTime(raw: string | null | undefined): string | null {
-    const value = (raw || '').trim();
-    if (!value) return null;
-
-    const match = /^([01]?\d|2[0-3]):([0-5]\d)(?::[0-5]\d)?$/.exec(value);
-    if (!match) return null;
-
-    const hour = match[1].padStart(2, '0');
-    const minute = match[2];
-    return `${hour}:${minute}`;
   }
 
   createDatabaseBackup(): void {

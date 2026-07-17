@@ -1,7 +1,8 @@
-import { Component, OnInit } from '@angular/core';
-import { finalize } from 'rxjs';
+import { Component, OnDestroy, OnInit } from '@angular/core';
+import { Subject, debounceTime, distinctUntilChanged, finalize, switchMap, takeUntil } from 'rxjs';
 import { ApiService } from '../../../core/services/api.service';
-import { LookupsDto, PaginatedList } from '../../../core/models/api.models';
+import { LookupsService } from '../../../core/services/lookups.service';
+import { PaginatedList } from '../../../core/models/api.models';
 import { ListPagination, QueryParams } from '../../../core/utils/list-pagination';
 import { mapNamedOptions, SearchableSelectOption } from '../../../shared/components/searchable-select/searchable-select.models';
 
@@ -31,7 +32,7 @@ interface NamedOption {
   templateUrl: './stock-ledger.component.html',
   standalone: false
 })
-export class StockLedgerComponent implements OnInit {
+export class StockLedgerComponent implements OnInit, OnDestroy {
   rows: LedgerRow[] = [];
   pagination = new ListPagination();
   products: NamedOption[] = [];
@@ -42,6 +43,9 @@ export class StockLedgerComponent implements OnInit {
   fromDate = '';
   toDate = '';
 
+  private readonly destroy$ = new Subject<void>();
+  private readonly productSearch$ = new Subject<string>();
+
   get productSelectOptions(): SearchableSelectOption[] {
     return mapNamedOptions(this.products);
   }
@@ -50,23 +54,33 @@ export class StockLedgerComponent implements OnInit {
     return mapNamedOptions(this.locations);
   }
 
-  constructor(private api: ApiService) {}
+  constructor(
+    private api: ApiService,
+    private lookupsService: LookupsService
+  ) {}
 
   ngOnInit(): void {
-    this.api.get<LookupsDto>('/lookups').subscribe({
-      next: res => {
-        this.locations = (res.data?.locations ?? []).map(l => ({
+    this.lookupsService.getLookups().subscribe({
+      next: data => {
+        this.locations = (data.locations ?? []).map(l => ({
           id: Number((l as { id?: number }).id),
           name: String((l as { name?: string }).name)
         }));
       }
     });
-    this.api.get<PaginatedList<{ productId: number; productName: string }>>('/products', { pageSize: 500 }).subscribe({
-      next: res => {
-        this.products = (res.data?.items ?? []).map(p => ({ id: p.productId, name: p.productName }));
-      }
-    });
+
+    this.loadProducts();
+    this.bindProductSearch();
     this.load();
+  }
+
+  ngOnDestroy(): void {
+    this.destroy$.next();
+    this.destroy$.complete();
+  }
+
+  onProductSearch(query: string): void {
+    this.productSearch$.next(query.trim());
   }
 
   onSearch(): void {
@@ -100,6 +114,47 @@ export class StockLedgerComponent implements OnInit {
         next: res => {
           this.rows = res.data?.items ?? [];
           this.pagination.applyResponse(res.data);
+        }
+      });
+  }
+
+  private loadProducts(search = ''): void {
+    const params: QueryParams = { pageSize: search ? 100 : 200 };
+    if (search) params['search'] = search;
+
+    this.api
+      .get<PaginatedList<{ productId: number; productName: string; sku?: string }>>('/products', params)
+      .subscribe({
+        next: res => {
+          this.products = (res.data?.items ?? []).map(p => ({
+            id: p.productId,
+            name: p.sku ? `${p.productName} (${p.sku})` : p.productName
+          }));
+        }
+      });
+  }
+
+  private bindProductSearch(): void {
+    this.productSearch$
+      .pipe(
+        debounceTime(250),
+        distinctUntilChanged(),
+        switchMap(q => {
+          const params: QueryParams = { pageSize: q ? 100 : 200 };
+          if (q) params['search'] = q;
+          return this.api.get<PaginatedList<{ productId: number; productName: string; sku?: string }>>(
+            '/products',
+            params
+          );
+        }),
+        takeUntil(this.destroy$)
+      )
+      .subscribe({
+        next: res => {
+          this.products = (res.data?.items ?? []).map(p => ({
+            id: p.productId,
+            name: p.sku ? `${p.productName} (${p.sku})` : p.productName
+          }));
         }
       });
   }

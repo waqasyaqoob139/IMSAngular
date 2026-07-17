@@ -6,6 +6,7 @@ import { SaveShortcutDirective } from './directives/save-shortcut.directive';
 import { PageNewShortcutDirective } from './directives/page-new-shortcut.directive';
 import { SearchableSelectComponent } from './components/searchable-select/searchable-select.component';
 import { ListPaginationComponent } from './components/list-pagination/list-pagination.component';
+import { MaskedProfitComponent } from './components/masked-profit/masked-profit.component';
 
 @NgModule({
   imports: [
@@ -16,7 +17,8 @@ import { ListPaginationComponent } from './components/list-pagination/list-pagin
     SaveShortcutDirective,
     PageNewShortcutDirective,
     SearchableSelectComponent,
-    ListPaginationComponent
+    ListPaginationComponent,
+    MaskedProfitComponent
   ],
   exports: [
     CommonModule,
@@ -26,7 +28,8 @@ import { ListPaginationComponent } from './components/list-pagination/list-pagin
     SaveShortcutDirective,
     PageNewShortcutDirective,
     SearchableSelectComponent,
-    ListPaginationComponent
+    ListPaginationComponent,
+    MaskedProfitComponent
   ]
 })
 export class SharedModule {}

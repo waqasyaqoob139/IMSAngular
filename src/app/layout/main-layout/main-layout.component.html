@@ -10,7 +10,11 @@
     </button>
 
     <div class="collapse navbar-collapse" id="mainNav">
-      <ul class="navbar-nav me-auto mb-2 mb-lg-0 app-nav-menu">
+      <ul
+        class="navbar-nav me-auto mb-2 mb-lg-0 app-nav-menu"
+        [class.nav-menus-locked]="navMenusLocked"
+        (click)="onNavMenuClick($event)"
+        (mouseleave)="navMenusLocked = false">
         <li class="nav-item" *ngIf="can(p.dashboard)">
           <a class="nav-link" routerLink="/dashboard" routerLinkActive="active">Dashboard</a>
         </li>

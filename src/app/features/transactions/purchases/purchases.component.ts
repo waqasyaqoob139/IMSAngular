@@ -8,7 +8,8 @@ import {
   TxnHoldDraft,
   TxnHoldService
 } from '../../../core/services/txn-hold.service';
-import { getApiErrorMessage, LookupsDto, PaginatedList } from '../../../core/models/api.models';
+import { LookupsService } from '../../../core/services/lookups.service';
+import { getApiErrorMessage, PaginatedList } from '../../../core/models/api.models';
 import {
   adjacentPaymentMode,
   buildProductShortKeyMap,
@@ -27,6 +28,13 @@ import { TxnBrowseProduct } from '../shared/txn-product-browse.component';
 import { todayIsoDate } from '../../../core/utils/date-format';
 import { ListPagination } from '../../../core/utils/list-pagination';
 import { resolveTxnPaymentStatus, txnPaymentStatusLabel } from '../../../core/utils/txn-payment-status';
+import {
+  filterProductsBySearchMode,
+  parseProductSearchMode,
+  productSearchPlaceholder,
+  ProductSearchMode,
+  resolveProductBySearchMode
+} from '../../../core/utils/product-search';
 
 interface PurchaseListItem {
   purchaseId: number;
@@ -46,6 +54,7 @@ interface ProductOption {
   purchaseCost: number;
   currentStock: number;
   shortKey?: string | null;
+  serialNo?: string | null;
 }
 
 interface NamedOption {
@@ -90,6 +99,7 @@ export class PurchasesComponent implements OnInit, OnDestroy {
   defaultTaxRate = 0;
   taxManuallyEdited = false;
   enableProductShortKeys = false;
+  productSearchMode: ProductSearchMode = 'Both';
 
   search = '';
   pagination = new ListPagination();
@@ -108,7 +118,8 @@ export class PurchasesComponent implements OnInit, OnDestroy {
     private fb: FormBuilder,
     private route: ActivatedRoute,
     private router: Router,
-    private txnHold: TxnHoldService
+    private txnHold: TxnHoldService,
+    private lookupsService: LookupsService
   ) {
     this.form = this.fb.group({
       supplierId: [null as number | null],
@@ -129,7 +140,6 @@ export class PurchasesComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.loadLookups();
-    this.loadProducts();
     this.loadAppSettings();
     this.loadCompanyProfile();
     this.route.queryParams.subscribe(() => this.resolveViewFromRoute());
@@ -249,6 +259,8 @@ export class PurchasesComponent implements OnInit, OnDestroy {
         const settings = res.data ?? [];
         const shortKeys = settings.find(s => s.settingKey === 'EnableProductShortKeys');
         this.enableProductShortKeys = shortKeys?.settingValue === 'true';
+        const searchMode = settings.find(s => s.settingKey === 'ProductSearchMode');
+        this.productSearchMode = parseProductSearchMode(searchMode?.settingValue);
       }
     });
   }
@@ -288,11 +300,11 @@ export class PurchasesComponent implements OnInit, OnDestroy {
   }
 
   get filteredProducts(): ProductOption[] {
-    const q = this.productSearch.trim().toLowerCase();
-    if (!q) return this.products;
-    return this.products.filter(
-      p => p.productName.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q)
-    );
+    return filterProductsBySearchMode(this.products, this.productSearch, this.productSearchMode);
+  }
+
+  get productSearchPlaceholderText(): string {
+    return productSearchPlaceholder(this.productSearchMode);
   }
 
   get pickerProducts(): ProductOption[] {
@@ -309,6 +321,7 @@ export class PurchasesComponent implements OnInit, OnDestroy {
       productId: p.productId,
       productName: p.productName,
       sku: p.sku,
+      serialNo: p.serialNo ?? null,
       stock: p.currentStock,
       price: p.purchaseCost
     }));
@@ -475,22 +488,7 @@ export class PurchasesComponent implements OnInit, OnDestroy {
   }
 
   private findLocalProduct(query: string): ProductOption | undefined {
-    const n = query.trim().toLowerCase();
-    if (!n) return undefined;
-
-    const exact = this.products.find(
-      p => p.productName.toLowerCase() === n || p.sku.toLowerCase() === n
-    );
-    if (exact) return exact;
-
-    const starts = this.products.find(
-      p => p.productName.toLowerCase().startsWith(n) || p.sku.toLowerCase().startsWith(n)
-    );
-    if (starts) return starts;
-
-    return this.products.find(
-      p => p.productName.toLowerCase().includes(n) || p.sku.toLowerCase().includes(n)
-    );
+    return resolveProductBySearchMode(this.products, query, this.productSearchMode);
   }
 
   onProductSearchKeydown(event: KeyboardEvent): void {
@@ -895,19 +893,18 @@ export class PurchasesComponent implements OnInit, OnDestroy {
   }
 
   loadProducts(): void {
-    this.api.get<PaginatedList<ProductOption>>('/products', { pageSize: 500 }).subscribe({
+    this.api.get<PaginatedList<ProductOption>>('/products', { pageSize: 200 }).subscribe({
       next: res => (this.products = res.data?.items ?? [])
     });
   }
 
   loadLookups(): void {
     this.loadingLookups = true;
-    this.api
-      .get<LookupsDto>('/lookups')
+    this.lookupsService
+      .getLookups()
       .pipe(finalize(() => (this.loadingLookups = false)))
       .subscribe({
-        next: res => {
-          const data = res.data;
+        next: data => {
           if (!data) return;
           this.suppliers = this.normalize(data.suppliers);
           this.locations = this.normalize(data.locations);
@@ -963,6 +960,9 @@ export class PurchasesComponent implements OnInit, OnDestroy {
   }
 
   private openCreateForm(): void {
+    if (!this.products.length) {
+      this.loadProducts();
+    }
     const draft = this.txnHold.getActiveDraft<PurchaseHoldFormValue>('purchase');
     if (draft) {
       this.applyDraft(draft);
@@ -1061,6 +1061,10 @@ export class PurchasesComponent implements OnInit, OnDestroy {
   }
 
   closeView(): void {
+    if (this.route.snapshot.queryParams['from'] === 'reports') {
+      this.router.navigate(['/reports']);
+      return;
+    }
     this.openList();
   }
 
@@ -1205,6 +1209,7 @@ export class PurchasesComponent implements OnInit, OnDestroy {
       .pipe(
         switchMap(supplierId => {
           if (pendingName && supplierId) {
+            this.lookupsService.invalidate();
             this.suppliers = [...this.suppliers, { id: supplierId, name: pendingName }].sort((a, b) =>
               a.name.localeCompare(b.name)
             );

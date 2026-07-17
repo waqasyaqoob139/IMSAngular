@@ -2,6 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import { FormBuilder, Validators } from '@angular/forms';
 import { finalize } from 'rxjs';
 import { ApiService } from '../../../core/services/api.service';
+import { LookupsService } from '../../../core/services/lookups.service';
 import { PaginatedList } from '../../../core/models/api.models';
 import { blockSaveIfInvalid } from '../../../core/utils/form-validation';
 import { ListPagination } from '../../../core/utils/list-pagination';
@@ -31,7 +32,11 @@ export class UnitsComponent implements OnInit {
   errorMessage = '';
   form;
 
-  constructor(private api: ApiService, private fb: FormBuilder) {
+  constructor(
+    private api: ApiService,
+    private fb: FormBuilder,
+    private lookupsService: LookupsService
+  ) {
     this.form = this.fb.group({
       unitName: ['', Validators.required],
       shortName: ['', Validators.required],
@@ -117,6 +122,7 @@ export class UnitsComponent implements OnInit {
 
     req.pipe(finalize(() => (this.saving = false))).subscribe({
       next: () => {
+        this.lookupsService.invalidate();
         this.message = this.editingId ? 'Unit updated.' : 'Unit created.';
         this.showForm = false;
         this.editingId = null;

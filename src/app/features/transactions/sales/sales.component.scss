@@ -287,6 +287,19 @@
     color: var(--ims-text-muted);
     line-height: 1;
     white-space: nowrap;
+
+    &.line-avl--danger {
+      color: #b91c1c;
+      font-weight: 700;
+    }
+  }
+
+  tr.pos-line--stock-error {
+    background: #fef2f2;
+
+    td {
+      border-color: #fecaca;
+    }
   }
 
   .col-price {

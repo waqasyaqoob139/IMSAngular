@@ -109,6 +109,11 @@
       display: block;
     }
   }
+
+  // After a link click, stay closed while the pointer is still over the menu.
+  .app-nav-menu.nav-menus-locked .nav-item.dropdown:hover > .dropdown-menu {
+    display: none !important;
+  }
 }
 
 .navbar-user {

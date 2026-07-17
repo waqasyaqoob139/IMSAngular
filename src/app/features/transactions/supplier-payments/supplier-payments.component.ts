@@ -22,9 +22,12 @@ interface PaymentListItem {
 interface PartyOption {
   id: number;
   name: string;
+  phone: string | null;
   balance: number;
   openingBalance: number;
 }
+
+type PageMode = 'dues' | 'list' | 'form' | 'view';
 
 @Component({
   selector: 'app-supplier-payments',
@@ -33,11 +36,13 @@ interface PartyOption {
 })
 export class SupplierPaymentsComponent implements OnInit, OnDestroy {
   items: PaymentListItem[] = [];
+  dues: PartyOption[] = [];
   suppliers: PartyOption[] = [];
   loading = false;
+  loadingDues = false;
   loadingParties = false;
   saving = false;
-  showForm = false;
+  mode: PageMode = 'dues';
   viewId: number | null = null;
   viewDetail: Record<string, unknown> | null = null;
   loadingView = false;
@@ -45,11 +50,26 @@ export class SupplierPaymentsComponent implements OnInit, OnDestroy {
   correctedAmount = 0;
   savingCorrection = false;
   search = '';
+  duesSearch = '';
   pagination = new ListPagination();
+  duesPagination = new ListPagination();
   message = '';
   errorMessage = '';
   form;
+  proofFile: File | null = null;
+  proofPreviewUrl: string | null = null;
+  viewProofUrl: string | null = null;
+  viewProofIsImage = false;
+  loadingProof = false;
   private readonly destroy$ = new Subject<void>();
+  private readonly maxProofBytes = 5 * 1024 * 1024;
+  private readonly allowedProofTypes = new Set([
+    'image/jpeg',
+    'image/png',
+    'image/webp',
+    'image/gif',
+    'application/pdf'
+  ]);
 
   constructor(
     private api: ApiService,
@@ -78,20 +98,26 @@ export class SupplierPaymentsComponent implements OnInit, OnDestroy {
 
   private resolveViewFromRoute(): void {
     const id = Number(this.route.snapshot.queryParams['id']);
+    const view = this.route.snapshot.queryParams['view'];
+    const supplierId = Number(this.route.snapshot.queryParams['supplierId']);
+
     if (id > 0) {
       this.openViewById(id);
-    } else if (this.route.snapshot.queryParams['view'] === 'list') {
+    } else if (view === 'list') {
       this.showList();
+    } else if (view === 'create' || supplierId > 0) {
+      this.resetCreateForm(supplierId > 0 ? supplierId : null);
     } else {
-      this.resetCreateForm();
+      this.showDues();
     }
   }
 
   private openViewById(id: number): void {
+    this.mode = 'view';
     this.viewId = id;
-    this.showForm = false;
     this.loadingView = true;
     this.viewDetail = null;
+    this.clearViewProof();
     this.api
       .get<Record<string, unknown>>(`/supplier-payments/${id}`)
       .pipe(finalize(() => (this.loadingView = false)))
@@ -100,9 +126,79 @@ export class SupplierPaymentsComponent implements OnInit, OnDestroy {
           this.viewDetail = res.data ?? null;
           this.correctedDate = toIsoDateForInput(String(this.viewDetail?.['paymentDate'] ?? ''));
           this.correctedAmount = Number(this.viewDetail?.['amount'] ?? 0);
+          if (this.viewDetail?.['hasProofDocument']) {
+            this.loadViewProof(id);
+          }
         },
         error: () => (this.errorMessage = 'Failed to load payment detail.')
       });
+  }
+
+  private loadViewProof(id: number): void {
+    this.loadingProof = true;
+    this.api
+      .getBlob(`/supplier-payments/${id}/proof`)
+      .pipe(finalize(() => (this.loadingProof = false)))
+      .subscribe({
+        next: blob => {
+          this.clearViewProof();
+          this.viewProofIsImage = blob.type.startsWith('image/');
+          this.viewProofUrl = URL.createObjectURL(blob);
+        },
+        error: () => (this.errorMessage = 'Could not load proof document.')
+      });
+  }
+
+  private clearViewProof(): void {
+    if (this.viewProofUrl) {
+      URL.revokeObjectURL(this.viewProofUrl);
+      this.viewProofUrl = null;
+    }
+    this.viewProofIsImage = false;
+    this.loadingProof = false;
+  }
+
+  onProofSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0] ?? null;
+    this.clearProofPreview();
+    this.proofFile = null;
+
+    if (!file) return;
+
+    if (file.size > this.maxProofBytes) {
+      this.errorMessage = 'Proof document must be 5 MB or smaller.';
+      input.value = '';
+      return;
+    }
+
+    const typeOk =
+      this.allowedProofTypes.has(file.type) ||
+      /\.(jpe?g|png|webp|gif|pdf)$/i.test(file.name);
+    if (!typeOk) {
+      this.errorMessage = 'Proof must be an image (JPG, PNG, WEBP, GIF) or PDF.';
+      input.value = '';
+      return;
+    }
+
+    this.errorMessage = '';
+    this.proofFile = file;
+    if (file.type.startsWith('image/')) {
+      this.proofPreviewUrl = URL.createObjectURL(file);
+    }
+  }
+
+  clearProofSelection(input?: HTMLInputElement): void {
+    this.clearProofPreview();
+    this.proofFile = null;
+    if (input) input.value = '';
+  }
+
+  private clearProofPreview(): void {
+    if (this.proofPreviewUrl) {
+      URL.revokeObjectURL(this.proofPreviewUrl);
+      this.proofPreviewUrl = null;
+    }
   }
 
   saveCorrection(): void {
@@ -133,6 +229,8 @@ export class SupplierPaymentsComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.clearProofPreview();
+    this.clearViewProof();
     this.destroy$.next();
     this.destroy$.complete();
   }
@@ -168,9 +266,18 @@ export class SupplierPaymentsComponent implements OnInit, OnDestroy {
     return Math.max(0, this.selectedSupplier.balance - this.selectedSupplier.openingBalance);
   }
 
+  get duesTotal(): number {
+    return this.dues.reduce((sum, d) => sum + d.balance, 0);
+  }
+
   onSearch(): void {
     this.pagination.reset();
     this.load();
+  }
+
+  onDuesSearch(): void {
+    this.duesPagination.reset();
+    this.loadDues();
   }
 
   onPageChange(page: number): void {
@@ -182,6 +289,17 @@ export class SupplierPaymentsComponent implements OnInit, OnDestroy {
     this.pagination.pageSize = size;
     this.pagination.reset();
     this.load();
+  }
+
+  onDuesPageChange(page: number): void {
+    this.duesPagination.pageNumber = page;
+    this.loadDues();
+  }
+
+  onDuesPageSizeChange(size: number): void {
+    this.duesPagination.pageSize = size;
+    this.duesPagination.reset();
+    this.loadDues();
   }
 
   load(): void {
@@ -198,10 +316,49 @@ export class SupplierPaymentsComponent implements OnInit, OnDestroy {
       });
   }
 
+  loadDues(): void {
+    this.loadingDues = true;
+    this.api
+      .get<
+        PaginatedList<{
+          supplierId: number;
+          supplierName: string;
+          phone: string | null;
+          openingBalance: number;
+          currentBalance: number;
+        }>
+      >(
+        '/supplier-payments/parties',
+        this.duesPagination.queryParams({ search: this.duesSearch, outstandingOnly: true })
+      )
+      .pipe(finalize(() => (this.loadingDues = false)))
+      .subscribe({
+        next: res => {
+          this.dues = (res.data?.items ?? []).map(s => ({
+            id: s.supplierId,
+            name: s.supplierName,
+            phone: s.phone ?? null,
+            balance: Number(s.currentBalance ?? 0),
+            openingBalance: Number(s.openingBalance ?? 0)
+          }));
+          this.duesPagination.applyResponse(res.data);
+        },
+        error: () => (this.errorMessage = 'Cannot load suppliers to pay.')
+      });
+  }
+
   loadParties(): void {
     this.loadingParties = true;
     this.api
-      .get<PaginatedList<{ supplierId: number; supplierName: string; openingBalance: number; currentBalance: number }>>('/suppliers', {
+      .get<
+        PaginatedList<{
+          supplierId: number;
+          supplierName: string;
+          phone: string | null;
+          openingBalance: number;
+          currentBalance: number;
+        }>
+      >('/supplier-payments/parties', {
         pageSize: 500
       })
       .pipe(finalize(() => (this.loadingParties = false)))
@@ -211,6 +368,7 @@ export class SupplierPaymentsComponent implements OnInit, OnDestroy {
             .map(s => ({
               id: s.supplierId,
               name: s.supplierName,
+              phone: s.phone ?? null,
               balance: Number(s.currentBalance ?? 0),
               openingBalance: Number(s.openingBalance ?? 0)
             }))
@@ -221,50 +379,71 @@ export class SupplierPaymentsComponent implements OnInit, OnDestroy {
       });
   }
 
-  openCreate(): void {
+  openDues(): void {
     this.router.navigate(['/transactions/supplier-payments']);
+  }
+
+  openCreate(supplierId?: number): void {
+    this.router.navigate(['/transactions/supplier-payments'], {
+      queryParams: supplierId ? { view: 'create', supplierId } : { view: 'create' }
+    });
+  }
+
+  payTo(party: PartyOption): void {
+    this.openCreate(party.id);
   }
 
   startNew(): void {
     if (this.saving) return;
-    if (this.viewId) {
-      this.router.navigate(['/transactions/supplier-payments']);
-      return;
-    }
-    this.resetCreateForm();
+    this.openCreate();
   }
 
   openList(): void {
     this.router.navigate(['/transactions/supplier-payments'], { queryParams: { view: 'list' } });
   }
 
-  showList(): void {
+  showDues(): void {
+    this.mode = 'dues';
     this.viewId = null;
     this.viewDetail = null;
-    this.showForm = false;
+    this.clearViewProof();
+    this.loadDues();
+    setTimeout(() => focusTxnSelector('.txn-list-search'), 0);
+  }
+
+  showList(): void {
+    this.mode = 'list';
+    this.viewId = null;
+    this.viewDetail = null;
+    this.clearViewProof();
     this.load();
     setTimeout(() => focusTxnSelector('.txn-list-search'), 0);
   }
 
-  private resetCreateForm(): void {
+  private resetCreateForm(preselectSupplierId: number | null = null): void {
+    this.mode = 'form';
     this.viewId = null;
     this.viewDetail = null;
-    this.showForm = true;
     this.message = '';
     this.errorMessage = '';
+    this.clearProofSelection();
+    this.clearViewProof();
     this.loadParties();
     this.form.reset({
-      supplierId: null,
+      supplierId: preselectSupplierId,
       paymentDate: todayIsoDate(),
       amount: 0,
       paymentMethodId: 1,
       referenceNumber: '',
       remarks: ''
     });
+    if (preselectSupplierId) {
+      this.onSupplierChange(preselectSupplierId);
+    }
   }
 
   cancel(): void {
-    this.openList();
+    this.openDues();
   }
 
   payFullBalance(): void {
@@ -286,22 +465,25 @@ export class SupplierPaymentsComponent implements OnInit, OnDestroy {
     const v = this.form.getRawValue();
     this.errorMessage = '';
     this.saving = true;
+
+    const body = new FormData();
+    body.append('supplierId', String(Number(v.supplierId)));
+    body.append('paymentDate', String(v.paymentDate));
+    body.append('amount', String(Number(v.amount)));
+    body.append('paymentMethodId', String(Number(v.paymentMethodId)));
+    if (v.referenceNumber) body.append('referenceNumber', String(v.referenceNumber));
+    if (v.remarks) body.append('remarks', String(v.remarks));
+    if (this.proofFile) body.append('proofDocument', this.proofFile, this.proofFile.name);
+
     this.api
-      .post<number>('/supplier-payments', {
-        supplierId: Number(v.supplierId),
-        paymentDate: v.paymentDate,
-        amount: Number(v.amount),
-        paymentMethodId: Number(v.paymentMethodId),
-        accountId: null,
-        referenceNumber: v.referenceNumber || null,
-        remarks: v.remarks || null
-      })
+      .postForm<number>('/supplier-payments', body)
       .pipe(finalize(() => (this.saving = false)))
       .subscribe({
         next: () => {
           this.message = 'Payment recorded.';
+          this.clearProofSelection();
           this.loadParties();
-          this.openList();
+          this.openDues();
         },
         error: err => (this.errorMessage = getApiErrorMessage(err, 'Save failed.'))
       });

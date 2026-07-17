@@ -15,7 +15,7 @@
       <input
         #browseSearchInput
         class="form-control form-control-sm"
-        placeholder="Search by name or SKU..."
+        [placeholder]="searchPlaceholder"
         [(ngModel)]="filter"
         (input)="onFilterInput()"
         (keydown)="onKeydown($event)"
@@ -25,7 +25,7 @@
     <div class="product-browse__list" role="listbox">
       <div class="product-browse__cols" aria-hidden="true">
         <span>Product</span>
-        <span>SKU</span>
+        <span>Serial / SKU</span>
         <span>Stock</span>
         <span>{{ priceLabel }}</span>
       </div>
@@ -42,7 +42,9 @@
         (click)="pick(p)"
         (mouseenter)="highlightedIndex = i">
         <span class="product-browse__name">{{ p.productName }}</span>
-        <span class="product-browse__sku">{{ p.sku }}</span>
+        <span class="product-browse__sku">
+          <ng-container *ngIf="p.serialNo">#{{ p.serialNo }} · </ng-container>{{ p.sku }}
+        </span>
         <span class="product-browse__stock">Stock {{ p.stock }}</span>
         <span class="product-browse__price">{{ p.price | number:'1.2-2' }}</span>
       </button>

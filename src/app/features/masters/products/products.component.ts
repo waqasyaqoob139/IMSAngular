@@ -3,6 +3,7 @@ import { FormBuilder, Validators } from '@angular/forms';
 import { finalize, forkJoin } from 'rxjs';
 import { ApiService } from '../../../core/services/api.service';
 import { AuthService } from '../../../core/services/auth.service';
+import { LookupsService } from '../../../core/services/lookups.service';
 import { LookupsDto, PaginatedList, getApiErrorMessage } from '../../../core/models/api.models';
 import { mapNamedOptions, SearchableSelectOption } from '../../../shared/components/searchable-select/searchable-select.models';
 import { blockSaveIfInvalid } from '../../../core/utils/form-validation';
@@ -26,6 +27,7 @@ interface Product {
   minimumStock: number;
   currentStock: number;
   shortKey?: string | null;
+  serialNo?: string | null;
   status: number;
 }
 
@@ -45,6 +47,7 @@ interface ProductDetail {
   imageUrl?: string;
   description?: string;
   shortKey?: string | null;
+  serialNo?: string | null;
   status: number;
 }
 
@@ -76,7 +79,9 @@ export class ProductsComponent implements OnInit {
   loading = false;
   saving = false;
   loadingDetail = false;
-  search = '';
+  filterProductName = '';
+  filterSerialNo = '';
+  filterCategoryId: number | null = null;
   pagination = new ListPagination();
   showForm = false;
   editingId: number | null = null;
@@ -122,6 +127,7 @@ export class ProductsComponent implements OnInit {
     private api: ApiService,
     private fb: FormBuilder,
     private auth: AuthService,
+    private lookupsService: LookupsService,
     private cdr: ChangeDetectorRef
   ) {
     this.form = this.fb.group({
@@ -136,6 +142,7 @@ export class ProductsComponent implements OnInit {
       wholesalePrice: [null as number | null],
       minimumStock: [0, [Validators.min(0)]],
       shortKey: [''],
+      serialNo: [''],
       description: [''],
       status: [1]
     });
@@ -160,12 +167,11 @@ export class ProductsComponent implements OnInit {
     this.loadingLookups = true;
     this.lookupError = '';
 
-    this.api
-      .get<LookupsDto>('/lookups')
+    this.lookupsService
+      .getLookups()
       .pipe(finalize(() => (this.loadingLookups = false)))
       .subscribe({
-        next: res => {
-          const data = res.data;
+        next: data => {
           if (data?.categories?.length || data?.units?.length) {
             this.applyLookups(data);
             return;
@@ -232,6 +238,14 @@ export class ProductsComponent implements OnInit {
     this.load();
   }
 
+  clearFilters(): void {
+    this.filterProductName = '';
+    this.filterSerialNo = '';
+    this.filterCategoryId = null;
+    this.pagination.reset();
+    this.load();
+  }
+
   onPageChange(page: number): void {
     this.pagination.pageNumber = page;
     this.load();
@@ -247,7 +261,14 @@ export class ProductsComponent implements OnInit {
     this.loading = true;
     this.errorMessage = '';
     this.api
-      .get<PaginatedList<Product>>('/products', this.pagination.queryParams({ search: this.search }))
+      .get<PaginatedList<Product>>(
+        '/products',
+        this.pagination.queryParams({
+          productName: this.filterProductName.trim() || undefined,
+          serialNo: this.filterSerialNo.trim() || undefined,
+          categoryId: this.filterCategoryId && this.filterCategoryId > 0 ? this.filterCategoryId : undefined
+        })
+      )
       .pipe(finalize(() => (this.loading = false)))
       .subscribe({
         next: res => {
@@ -386,6 +407,7 @@ export class ProductsComponent implements OnInit {
       wholesalePrice: null,
       minimumStock: 0,
       shortKey: '',
+      serialNo: '',
       description: '',
       status: 1
     });
@@ -403,6 +425,19 @@ export class ProductsComponent implements OnInit {
     this.errorMessage = '';
     this.showForm = true;
     this.loadingDetail = true;
+    // Prefill from list row so Serial # is visible immediately
+    this.form.patchValue({
+      barcode: product.barcode ?? '',
+      sku: product.sku,
+      productName: product.productName,
+      purchaseCost: product.purchaseCost,
+      sellingPrice: product.sellingPrice,
+      wholesalePrice: product.wholesalePrice ?? null,
+      minimumStock: product.minimumStock,
+      shortKey: product.shortKey ?? '',
+      serialNo: product.serialNo ?? '',
+      status: product.status
+    });
     this.api
       .get<ProductDetail>(`/products/${product.productId}`)
       .pipe(finalize(() => (this.loadingDetail = false)))
@@ -421,6 +456,7 @@ export class ProductsComponent implements OnInit {
             wholesalePrice: p.wholesalePrice ?? null,
             minimumStock: p.minimumStock,
             shortKey: p.shortKey ?? '',
+            serialNo: p.serialNo ?? '',
             description: p.description ?? '',
             status: p.status
           });
@@ -575,6 +611,7 @@ export class ProductsComponent implements OnInit {
           : null,
       minimumStock: Number(value.minimumStock) || 0,
       shortKey: value.shortKey?.trim() ? value.shortKey.trim().toUpperCase().slice(0, 1) : null,
+      serialNo: value.serialNo?.trim() ? value.serialNo.trim().toUpperCase().slice(0, 10) : null,
       imageUrl: null,
       description: value.description?.trim() || null,
       status: Number(value.status) || 1

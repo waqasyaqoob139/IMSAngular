@@ -106,10 +106,21 @@
             <div class="col-md-6" *ngFor="let s of printSettings">
               <label class="form-label">{{ settingLabel(s.settingKey) }}</label>
               <ng-container *ngIf="isPrinterNameSetting(s.settingKey); else printField">
-                <input class="form-control form-control-sm" list="printerList" [(ngModel)]="s.settingValue" placeholder="POS-80" />
-                <datalist id="printerList">
-                  <option *ngFor="let p of installedPrinters" [value]="p"></option>
-                </datalist>
+                <select class="form-select form-select-sm" [(ngModel)]="s.settingValue">
+                  <option value="">— Select printer —</option>
+                  <option *ngFor="let p of installedPrinters" [value]="p">{{ p }}</option>
+                  <option
+                    *ngIf="s.settingValue && !isPrinterInstalled(s.settingValue)"
+                    [value]="s.settingValue">
+                    {{ s.settingValue }} (not found — pick another)
+                  </option>
+                </select>
+                <div class="form-text text-danger" *ngIf="s.settingValue && !isPrinterInstalled(s.settingValue)">
+                  This printer name is missing on the API PC (deleted/renamed). Refresh and pick from the list.
+                </div>
+                <div class="form-text text-warning" *ngIf="!installedPrinters.length && !loadingPrinters">
+                  No printers visible to the API. Install the driver on the server PC, or run the API as the logged-in Windows user (not SYSTEM).
+                </div>
               </ng-container>
               <ng-template #printField>
                 <ng-container *ngIf="isPaperWidthSetting(s.settingKey); else printBoolOrText">
@@ -140,9 +151,14 @@
           <div class="row g-2">
             <div class="col-md-6" *ngFor="let s of otherSettings">
               <label class="form-label">{{ settingLabel(s.settingKey) }}</label>
-              <ng-container *ngIf="isBooleanSetting(s.settingKey); else textSetting">
+              <ng-container *ngIf="isBooleanSetting(s.settingKey); else searchModeOrText">
                 <app-searchable-select [(ngModel)]="s.settingValue" [small]="true" [items]="yesNoOptions" />
               </ng-container>
+              <ng-template #searchModeOrText>
+                <ng-container *ngIf="isProductSearchModeSetting(s.settingKey); else textSetting">
+                  <app-searchable-select [(ngModel)]="s.settingValue" [small]="true" [items]="productSearchModeOptions" />
+                </ng-container>
+              </ng-template>
               <ng-template #textSetting>
                 <input class="form-control form-control-sm" [(ngModel)]="s.settingValue" />
               </ng-template>
@@ -164,10 +180,10 @@
             [(ngModel)]="backup.settingValue"
             placeholder="D:\InvDB.bak" />
           <p class="text-muted small mb-2">
-            Manual backup overwrites this file. Auto backups create dated files next to it
-            (for example InvDB_20260714_2300.bak). SQL Server service must be able to write there.
+            Manual backup only. Clicking Backup now overwrites this file.
+            SQL Server service must be able to write to this path.
           </p>
-          <div class="settings-card__actions mb-3">
+          <div class="settings-card__actions">
             <button class="btn btn-outline-secondary btn-sm" type="button" (click)="saveBackupPath()" [disabled]="saving">
               Save path
             </button>
@@ -177,37 +193,6 @@
               (click)="createDatabaseBackup()"
               [disabled]="backingUpDatabase">
               {{ backingUpDatabase ? 'Backing up...' : 'Backup now' }}
-            </button>
-          </div>
-
-          <div class="border-top pt-3" *ngIf="autoBackupEnabledSetting as autoEnabled">
-            <label class="form-label">Automatic daily backup</label>
-            <div class="d-flex flex-wrap gap-2 align-items-end mb-2">
-              <div class="flex-grow-1" style="min-width: 9rem;">
-                <app-searchable-select
-                  [(ngModel)]="autoEnabled.settingValue"
-                  [small]="true"
-                  [items]="yesNoOptions" />
-              </div>
-              <div style="min-width: 7rem;" *ngIf="autoBackupTimeSetting as autoTime">
-                <label class="form-label small mb-1">Time</label>
-                <input
-                  class="form-control form-control-sm"
-                  type="time"
-                  [(ngModel)]="autoTime.settingValue" />
-              </div>
-            </div>
-            <p class="text-muted small mb-2">
-              Runs once per day for each scheduled time while the API is running.
-              To test again today, change the time slightly and click Save schedule.
-              Last auto backup: <strong>{{ lastAutoBackupLabel }}</strong>
-            </p>
-            <button
-              class="btn btn-outline-secondary btn-sm"
-              type="button"
-              (click)="saveAutoBackupSettings()"
-              [disabled]="saving">
-              Save schedule
             </button>
           </div>
         </div>

@@ -2,7 +2,8 @@ import { Component, OnInit } from '@angular/core';
 import { FormArray, FormBuilder, Validators } from '@angular/forms';
 import { finalize } from 'rxjs';
 import { ApiService } from '../../../core/services/api.service';
-import { getApiErrorMessage, LookupsDto, PaginatedList } from '../../../core/models/api.models';
+import { LookupsService } from '../../../core/services/lookups.service';
+import { getApiErrorMessage, PaginatedList } from '../../../core/models/api.models';
 import { blockSaveIfInvalid } from '../../../core/utils/form-validation';
 import { ListPagination } from '../../../core/utils/list-pagination';
 import { mapNamedOptions, mapProductOptions, SearchableSelectOption } from '../../../shared/components/searchable-select/searchable-select.models';
@@ -52,7 +53,11 @@ export class StockTransfersComponent implements OnInit {
     return mapProductOptions(this.products);
   }
 
-  constructor(private api: ApiService, private fb: FormBuilder) {
+  constructor(
+    private api: ApiService,
+    private fb: FormBuilder,
+    private lookupsService: LookupsService
+  ) {
     this.form = this.fb.group({
       transferDate: [todayIsoDate(), Validators.required],
       fromLocationId: [null as number | null, Validators.required],
@@ -65,7 +70,6 @@ export class StockTransfersComponent implements OnInit {
   ngOnInit(): void {
     this.load();
     this.loadLookups();
-    this.loadProducts();
   }
 
   get lines(): FormArray {
@@ -112,9 +116,9 @@ export class StockTransfersComponent implements OnInit {
   }
 
   loadLookups(): void {
-    this.api.get<LookupsDto>('/lookups').subscribe({
-      next: res => {
-        this.locations = (res.data?.locations ?? []).map(l => ({
+    this.lookupsService.getLookups().subscribe({
+      next: data => {
+        this.locations = (data.locations ?? []).map(l => ({
           id: Number((l as { id?: number }).id),
           name: String((l as { name?: string }).name)
         }));
@@ -129,6 +133,9 @@ export class StockTransfersComponent implements OnInit {
   }
 
   openCreate(): void {
+    if (!this.products.length) {
+      this.loadProducts();
+    }
     this.showForm = true;
     this.message = '';
     this.errorMessage = '';

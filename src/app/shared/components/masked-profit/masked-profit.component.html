@@ -1,0 +1,26 @@
+<span
+  class="masked-profit"
+  *ngIf="{ visible: (profitVisibility.visible$ | async) } as state"
+  [class.masked-profit--toggle-only]="!hasValue && showToggle">
+  <span *ngIf="hasValue" class="masked-profit__value">
+    {{ state.visible ? (numericValue | number:digits) : mask }}
+  </span>
+  <button
+    *ngIf="showToggle"
+    type="button"
+    class="masked-profit__toggle"
+    (click)="toggle($event)"
+    [attr.aria-label]="state.visible ? 'Hide profit' : 'Show profit'"
+    [attr.aria-pressed]="state.visible"
+    [title]="state.visible ? 'Hide profit' : 'Show profit'">
+    <svg *ngIf="state.visible" class="masked-profit__icon" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12Z" fill="none" stroke="currentColor" stroke-width="2"/>
+      <circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/>
+    </svg>
+    <svg *ngIf="!state.visible" class="masked-profit__icon" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12Z" fill="none" stroke="currentColor" stroke-width="2"/>
+      <circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/>
+      <path d="M3 3l18 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+    </svg>
+  </button>
+</span>

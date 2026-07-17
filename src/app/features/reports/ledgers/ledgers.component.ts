@@ -1,6 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { finalize } from 'rxjs';
 import { ApiService } from '../../../core/services/api.service';
+import { LookupsService } from '../../../core/services/lookups.service';
 import { PaginatedList } from '../../../core/models/api.models';
 import { mapNamedOptions, SearchableSelectOption } from '../../../shared/components/searchable-select/searchable-select.models';
 
@@ -46,15 +47,28 @@ export class LedgersComponent implements OnInit {
     return mapNamedOptions(this.customers);
   }
 
-  constructor(private api: ApiService) {}
+  constructor(
+    private api: ApiService,
+    private lookupsService: LookupsService
+  ) {}
 
   ngOnInit(): void {
-    this.api.get<PaginatedList<{ customerId: number; customerName: string }>>('/customers', { pageSize: 500 }).subscribe({
-      next: res => (this.customers = (res.data?.items ?? []).map(c => ({ id: c.customerId, name: c.customerName })))
+    this.lookupsService.getLookups().subscribe({
+      next: data => {
+        this.customers = (data.customers ?? []).map(c => ({
+          id: Number((c as { id?: number }).id),
+          name: String((c as { name?: string }).name)
+        }));
+        this.suppliers = (data.suppliers ?? []).map(s => ({
+          id: Number((s as { id?: number }).id),
+          name: String((s as { name?: string }).name)
+        }));
+      }
     });
-    this.api.get<PaginatedList<{ supplierId: number; supplierName: string }>>('/suppliers', { pageSize: 500 }).subscribe({
-      next: res => (this.suppliers = (res.data?.items ?? []).map(s => ({ id: s.supplierId, name: s.supplierName })))
-    });
+  }
+
+  private ensureProductsLoaded(): void {
+    if (this.products.length) return;
     this.api.get<PaginatedList<{ productId: number; productName: string }>>('/products', { pageSize: 500 }).subscribe({
       next: res => (this.products = (res.data?.items ?? []).map(p => ({ id: p.productId, name: p.productName })))
     });
@@ -81,5 +95,8 @@ export class LedgersComponent implements OnInit {
   onTypeChange(): void {
     this.partyId = null;
     this.rows = [];
+    if (this.ledgerType === 'product') {
+      this.ensureProductsLoaded();
+    }
   }
 }

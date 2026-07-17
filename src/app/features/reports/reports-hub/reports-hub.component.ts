@@ -1,6 +1,9 @@
-import { Component, OnInit } from '@angular/core';
-import { finalize } from 'rxjs';
+import { Component, OnDestroy, OnInit } from '@angular/core';
+import { Subject, debounceTime, distinctUntilChanged, finalize, switchMap, takeUntil } from 'rxjs';
 import { ApiService } from '../../../core/services/api.service';
+import { PaginatedList } from '../../../core/models/api.models';
+import { QueryParams } from '../../../core/utils/list-pagination';
+import { mapNamedOptions, SearchableSelectOption } from '../../../shared/components/searchable-select/searchable-select.models';
 
 interface SalesReportRow {
   saleId: number;
@@ -15,6 +18,7 @@ interface SalesReportRow {
   netAmount: number;
   netProfitAmount: number;
   returnStatus: string;
+  itemsSummary?: string;
 }
 
 interface SalesReportSummary {
@@ -42,6 +46,7 @@ interface PurchaseReportRow {
   returnedAmount: number;
   netAmount: number;
   returnStatus: string;
+  itemsSummary?: string;
 }
 
 interface PurchaseReportSummary {
@@ -61,6 +66,7 @@ interface StockReportRow {
   sku: string;
   categoryName: string;
   currentStock: number;
+  minimumStock?: number;
   weightedAverageCost: number;
   inventoryValue: number;
   sellingPrice: number;
@@ -84,18 +90,44 @@ interface ExpenseReportRow {
   description: string | null;
 }
 
+interface NamedOption {
+  id: number;
+  name: string;
+}
+
 @Component({
   selector: 'app-reports-hub',
   templateUrl: './reports-hub.component.html',
   standalone: false
 })
-export class ReportsHubComponent implements OnInit {
+export class ReportsHubComponent implements OnInit, OnDestroy {
   activeTab: 'sales' | 'purchases' | 'stock' | 'profit' | 'expenses' = 'sales';
   loading = false;
   fromDate = '';
   toDate = '';
   search = '';
+  productId: number | null = null;
+  products: NamedOption[] = [];
   hideFullyReturned = true;
+  /** Stock tab: show all products, or only low stock. */
+  stockView: 'all' | 'low' = 'low';
+  /** When stockView=low: stock ≤ this value (ignored if useMinLevel). */
+  lowStockMax = 5;
+  /** When true, show items at/below each product's MinimumStock instead of a fixed max. */
+  lowStockUseMinLevel = false;
+
+  readonly lowStockThresholdOptions: SearchableSelectOption[] = [
+    { value: 3, label: 'Stock ≤ 3' },
+    { value: 5, label: 'Stock ≤ 5' },
+    { value: 10, label: 'Stock ≤ 10' },
+    { value: 15, label: 'Stock ≤ 15' },
+    { value: 20, label: 'Stock ≤ 20' }
+  ];
+
+  readonly stockViewOptions: SearchableSelectOption[] = [
+    { value: 'low', label: 'Low stock only' },
+    { value: 'all', label: 'All products' }
+  ];
 
   salesReport: SalesReport | null = null;
   purchaseReport: PurchaseReport | null = null;
@@ -103,11 +135,29 @@ export class ReportsHubComponent implements OnInit {
   expenseRows: ExpenseReportRow[] = [];
   profit: ProfitReport | null = null;
 
+  private readonly destroy$ = new Subject<void>();
+  private readonly productSearch$ = new Subject<string>();
+  private readonly salesReload$ = new Subject<void>();
+  private readonly purchasesReload$ = new Subject<void>();
+
+  get productSelectOptions(): SearchableSelectOption[] {
+    return mapNamedOptions(this.products);
+  }
+
   constructor(private api: ApiService) {}
 
   ngOnInit(): void {
     this.setDateRange('month');
+    this.loadProducts();
+    this.bindProductSearch();
+    this.bindSalesReload();
+    this.bindPurchasesReload();
     this.loadSales();
+  }
+
+  ngOnDestroy(): void {
+    this.destroy$.next();
+    this.destroy$.complete();
   }
 
   get salesRows(): SalesReportRow[] {
@@ -128,11 +178,7 @@ export class ReportsHubComponent implements OnInit {
 
   setTab(tab: 'sales' | 'purchases' | 'stock' | 'profit' | 'expenses'): void {
     this.activeTab = tab;
-    if (tab === 'sales') this.loadSales();
-    if (tab === 'purchases') this.loadPurchases();
-    if (tab === 'stock') this.loadStock();
-    if (tab === 'profit') this.loadProfit();
-    if (tab === 'expenses') this.loadExpenses();
+    this.reloadActiveReport();
   }
 
   setDateRange(range: 'today' | 'week' | 'month'): void {
@@ -153,12 +199,32 @@ export class ReportsHubComponent implements OnInit {
   applyDateRange(range: 'today' | 'week' | 'month'): void {
     this.setDateRange(range);
     if (this.activeTab === 'stock') return;
-    this.setTab(this.activeTab);
+    this.reloadActiveReport();
   }
 
   onHideFullyReturnedChange(): void {
+    this.reloadActiveReport();
+  }
+
+  /** Use the event value — do not rely on ngModel timing. */
+  onProductSelected(value: unknown): void {
+    this.productId = value == null || value === '' ? null : Number(value);
+    if (this.productId !== null && Number.isNaN(this.productId)) {
+      this.productId = null;
+    }
+    this.reloadActiveReport();
+  }
+
+  onProductSearch(query: string): void {
+    this.productSearch$.next(query.trim());
+  }
+
+  reloadActiveReport(): void {
     if (this.activeTab === 'sales') this.loadSales();
-    if (this.activeTab === 'purchases') this.loadPurchases();
+    else if (this.activeTab === 'purchases') this.loadPurchases();
+    else if (this.activeTab === 'stock') this.loadStock();
+    else if (this.activeTab === 'profit') this.loadProfit();
+    else if (this.activeTab === 'expenses') this.loadExpenses();
   }
 
   returnStatusLabel(status: string): string {
@@ -173,37 +239,47 @@ export class ReportsHubComponent implements OnInit {
   }
 
   loadSales(): void {
-    this.loading = true;
-    const params: Record<string, string | number | boolean | undefined> = {
-      hideFullyReturned: this.hideFullyReturned
-    };
-    if (this.fromDate) params['fromDate'] = this.fromDate;
-    if (this.toDate) params['toDate'] = this.toDate;
-    this.api
-      .get<SalesReport>('/reports/sales', params)
-      .pipe(finalize(() => (this.loading = false)))
-      .subscribe({ next: res => (this.salesReport = res.data ?? null) });
+    this.salesReload$.next();
   }
 
   loadPurchases(): void {
-    this.loading = true;
-    const params: Record<string, string | number | boolean | undefined> = {
-      hideFullyReturned: this.hideFullyReturned
-    };
-    if (this.fromDate) params['fromDate'] = this.fromDate;
-    if (this.toDate) params['toDate'] = this.toDate;
-    this.api
-      .get<PurchaseReport>('/reports/purchases', params)
-      .pipe(finalize(() => (this.loading = false)))
-      .subscribe({ next: res => (this.purchaseReport = res.data ?? null) });
+    this.purchasesReload$.next();
   }
 
   loadStock(): void {
     this.loading = true;
+    const params: Record<string, string | number | boolean | undefined> = {};
+    const q = this.search.trim();
+    if (q) params['search'] = q;
+
+    if (this.stockView === 'low') {
+      if (this.lowStockUseMinLevel) {
+        params['belowMinimumOnly'] = true;
+      } else {
+        params['maxStock'] = this.lowStockMax;
+      }
+    }
+
     this.api
-      .get<StockReportRow[]>('/reports/stock', { search: this.search })
+      .get<StockReportRow[]>('/reports/stock', params)
       .pipe(finalize(() => (this.loading = false)))
       .subscribe({ next: res => (this.stockRows = res.data ?? []) });
+  }
+
+  onStockFiltersChange(): void {
+    if (this.activeTab === 'stock') this.loadStock();
+  }
+
+  onLowStockThresholdChange(value: unknown): void {
+    const n = Number(value);
+    this.lowStockMax = Number.isFinite(n) && n > 0 ? n : 5;
+    this.lowStockUseMinLevel = false;
+    this.onStockFiltersChange();
+  }
+
+  onStockViewChange(value: unknown): void {
+    this.stockView = value === 'all' ? 'all' : 'low';
+    this.onStockFiltersChange();
   }
 
   loadProfit(): void {
@@ -226,6 +302,101 @@ export class ReportsHubComponent implements OnInit {
       .get<ExpenseReportRow[]>('/reports/expenses', params)
       .pipe(finalize(() => (this.loading = false)))
       .subscribe({ next: res => (this.expenseRows = res.data ?? []) });
+  }
+
+  private bindSalesReload(): void {
+    this.salesReload$
+      .pipe(
+        switchMap(() => {
+          this.loading = true;
+          this.salesReport = null;
+          return this.api
+            .get<SalesReport>('/reports/sales', this.buildTxnReportParams())
+            .pipe(finalize(() => (this.loading = false)));
+        }),
+        takeUntil(this.destroy$)
+      )
+      .subscribe({
+        next: res => (this.salesReport = res.data ?? null)
+      });
+  }
+
+  private bindPurchasesReload(): void {
+    this.purchasesReload$
+      .pipe(
+        switchMap(() => {
+          this.loading = true;
+          this.purchaseReport = null;
+          return this.api
+            .get<PurchaseReport>('/reports/purchases', this.buildTxnReportParams())
+            .pipe(finalize(() => (this.loading = false)));
+        }),
+        takeUntil(this.destroy$)
+      )
+      .subscribe({
+        next: res => (this.purchaseReport = res.data ?? null)
+      });
+  }
+
+  private buildTxnReportParams(): Record<string, string | number | boolean | undefined> {
+    const params: Record<string, string | number | boolean | undefined> = {
+      hideFullyReturned: this.hideFullyReturned
+    };
+    if (this.fromDate) params['fromDate'] = this.fromDate;
+    if (this.toDate) params['toDate'] = this.toDate;
+    if (this.productId != null && this.productId > 0) {
+      params['productId'] = this.productId;
+    }
+    return params;
+  }
+
+  private loadProducts(search = ''): void {
+    const params: QueryParams = { pageSize: search ? 100 : 300 };
+    if (search) params['search'] = search;
+
+    this.api
+      .get<PaginatedList<{ productId: number; productName: string; sku?: string }>>('/products', params)
+      .subscribe({
+        next: res => {
+          this.products = (res.data?.items ?? []).map(p => ({
+            id: p.productId,
+            name: p.sku ? `${p.productName} (${p.sku})` : p.productName
+          }));
+        }
+      });
+  }
+
+  private bindProductSearch(): void {
+    this.productSearch$
+      .pipe(
+        debounceTime(250),
+        distinctUntilChanged(),
+        switchMap(q => {
+          const params: QueryParams = { pageSize: q ? 100 : 300 };
+          if (q) params['search'] = q;
+          return this.api.get<PaginatedList<{ productId: number; productName: string; sku?: string }>>(
+            '/products',
+            params
+          );
+        }),
+        takeUntil(this.destroy$)
+      )
+      .subscribe({
+        next: res => {
+          const mapped = (res.data?.items ?? []).map(p => ({
+            id: p.productId,
+            name: p.sku ? `${p.productName} (${p.sku})` : p.productName
+          }));
+
+          // Keep the currently selected item visible even if search excluded it.
+          if (this.productId && !mapped.some(p => p.id === this.productId)) {
+            const kept = this.products.find(p => p.id === this.productId);
+            this.products = kept ? [kept, ...mapped] : mapped;
+          } else {
+            this.products = mapped;
+          }
+        }
+      });
   }
 
   private toIsoDate(value: Date): string {

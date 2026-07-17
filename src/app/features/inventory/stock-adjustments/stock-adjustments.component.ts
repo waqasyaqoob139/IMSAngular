@@ -2,7 +2,8 @@ import { Component, OnDestroy, OnInit } from '@angular/core';
 import { FormArray, FormBuilder, Validators } from '@angular/forms';
 import { finalize, Subscription } from 'rxjs';
 import { ApiService } from '../../../core/services/api.service';
-import { getApiErrorMessage, LookupsDto, PaginatedList } from '../../../core/models/api.models';
+import { LookupsService } from '../../../core/services/lookups.service';
+import { getApiErrorMessage, PaginatedList } from '../../../core/models/api.models';
 import { blockSaveIfInvalid } from '../../../core/utils/form-validation';
 import { ListPagination } from '../../../core/utils/list-pagination';
 import { mapNamedOptions, mapProductOptions, SearchableSelectOption } from '../../../shared/components/searchable-select/searchable-select.models';
@@ -75,7 +76,11 @@ export class StockAdjustmentsComponent implements OnInit, OnDestroy {
     return mapNamedOptions(this.adjustmentTypes);
   }
 
-  constructor(private api: ApiService, private fb: FormBuilder) {
+  constructor(
+    private api: ApiService,
+    private fb: FormBuilder,
+    private lookupsService: LookupsService
+  ) {
     this.form = this.fb.group({
       adjustmentDate: [todayIsoDate(), Validators.required],
       locationId: [null as number | null, Validators.required],
@@ -88,7 +93,6 @@ export class StockAdjustmentsComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.load();
     this.loadLookups();
-    this.loadProducts();
     this.api.get<AdjustmentType[]>('/inventory/adjustment-types').subscribe({
       next: res => (this.adjustmentTypes = (res.data ?? []).map(t => ({ id: t.id, name: t.name })))
     });
@@ -146,9 +150,9 @@ export class StockAdjustmentsComponent implements OnInit, OnDestroy {
   }
 
   loadLookups(): void {
-    this.api.get<LookupsDto>('/lookups').subscribe({
-      next: res => {
-        this.locations = (res.data?.locations ?? []).map(l => ({
+    this.lookupsService.getLookups().subscribe({
+      next: data => {
+        this.locations = (data.locations ?? []).map(l => ({
           id: Number((l as { id?: number }).id),
           name: String((l as { name?: string }).name)
         }));
@@ -157,7 +161,7 @@ export class StockAdjustmentsComponent implements OnInit, OnDestroy {
   }
 
   loadProducts(): void {
-    this.api.get<PaginatedList<ProductOption>>('/products', { pageSize: 5000 }).subscribe({
+    this.api.get<PaginatedList<ProductOption>>('/products', { pageSize: 300 }).subscribe({
       next: res =>
         (this.products = (res.data?.items ?? []).map(p => ({
           ...p,
@@ -219,6 +223,9 @@ export class StockAdjustmentsComponent implements OnInit, OnDestroy {
   }
 
   openCreate(): void {
+    if (!this.products.length) {
+      this.loadProducts();
+    }
     this.showForm = true;
     this.message = '';
     this.errorMessage = '';

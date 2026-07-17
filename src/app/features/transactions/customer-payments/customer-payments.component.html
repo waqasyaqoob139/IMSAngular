@@ -2,10 +2,61 @@
   <div *ngIf="message" class="alert alert-success">{{ message }}</div>
   <div *ngIf="errorMessage" class="alert alert-danger">{{ errorMessage }}</div>
 
-  <ng-container *ngIf="!showForm && !viewId">
+  <ng-container *ngIf="mode === 'dues'">
     <div class="content-panel">
       <div class="toolbar">
-        <span class="toolbar-title">Customer Payments</span>
+        <span class="toolbar-title">To Collect</span>
+        <input class="form-control txn-list-search" appTxnAutofocus placeholder="Search customer..." [(ngModel)]="duesSearch" (keyup.enter)="onDuesSearch()" />
+        <button class="btn btn-outline-secondary btn-sm" (click)="onDuesSearch()" [disabled]="loadingDues">Search</button>
+        <div class="toolbar-actions">
+          <button class="btn btn-outline-secondary btn-sm" (click)="openList()">Payment History</button>
+          <button class="btn btn-primary btn-sm" (click)="openCreate()">+ Record Payment</button>
+        </div>
+      </div>
+      <div class="dues-summary" *ngIf="!loadingDues && dues.length > 0">
+        <span>{{ duesPagination.totalCount }} customer{{ duesPagination.totalCount === 1 ? '' : 's' }} with dues</span>
+        <strong>{{ duesPagination.totalPages > 1 ? 'This page' : 'Total' }}: {{ duesTotal | number:'1.2-2' }}</strong>
+      </div>
+      <div *ngIf="loadingDues" class="loading-row">Loading...</div>
+      <div class="data-table-wrap" *ngIf="!loadingDues">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Customer</th>
+              <th>Phone</th>
+              <th class="text-end">Outstanding</th>
+              <th class="col-actions">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngIf="dues.length === 0" class="empty-row">
+              <td colspan="4">No customers with outstanding balance.</td>
+            </tr>
+            <tr *ngFor="let c of dues">
+              <td><strong>{{ c.name }}</strong></td>
+              <td>{{ c.phone || '—' }}</td>
+              <td class="text-end"><strong>{{ c.balance | number:'1.2-2' }}</strong></td>
+              <td class="col-actions">
+                <button class="btn btn-sm btn-primary" (click)="collectFrom(c)">Collect</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <app-list-pagination
+          [pagination]="duesPagination"
+          [loading]="loadingDues"
+          (pageChange)="onDuesPageChange($event)"
+          (pageSizeChange)="onDuesPageSizeChange($event)">
+        </app-list-pagination>
+      </div>
+    </div>
+  </ng-container>
+
+  <ng-container *ngIf="mode === 'list'">
+    <div class="content-panel">
+      <div class="toolbar">
+        <button type="button" class="txn-list-link" (click)="openDues()">← To Collect</button>
+        <span class="toolbar-title">Payment History</span>
         <input class="form-control txn-list-search" appTxnAutofocus placeholder="Search..." [(ngModel)]="search" (keyup.enter)="onSearch()" />
         <button class="btn btn-outline-secondary btn-sm" (click)="onSearch()" [disabled]="loading">Search</button>
         <div class="toolbar-actions">
@@ -42,7 +93,7 @@
     </div>
   </ng-container>
 
-  <ng-container *ngIf="viewId">
+  <ng-container *ngIf="mode === 'view' && viewId">
     <div class="content-panel">
       <div class="toolbar">
         <button type="button" class="txn-list-link" (click)="closeView()">← Back</button>
@@ -83,15 +134,16 @@
     </div>
   </ng-container>
 
-  <ng-container *ngIf="showForm">
+  <ng-container *ngIf="mode === 'form'">
     <div class="form-panel">
       <form [formGroup]="form" (ngSubmit)="save()" appTxnFormKeyboard [txnKeyboardActive]="!saving" (txnSave)="save()" (txnCancel)="cancel()">
         <div class="txn-form-bar">
           <div class="txn-head">
             <div class="txn-head__left">
+              <button type="button" class="txn-list-link" (click)="openDues()" [disabled]="saving">← To Collect</button>
               <span class="txn-head__type">Customer Payment</span>
             </div>
-            <button type="button" class="btn btn-primary btn-sm txn-head__list-btn" (click)="openList()" [disabled]="saving">Payments List</button>
+            <button type="button" class="btn btn-primary btn-sm txn-head__list-btn" (click)="openList()" [disabled]="saving">Payment History</button>
           </div>
         </div>
         <div class="row g-2">

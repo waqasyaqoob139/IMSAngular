@@ -10,7 +10,7 @@
     <ul class="nav nav-tabs mb-3">
       <li class="nav-item"><button class="nav-link" [class.active]="activeTab === 'sales'" (click)="setTab('sales')">Sales</button></li>
       <li class="nav-item"><button class="nav-link" [class.active]="activeTab === 'purchases'" (click)="setTab('purchases')">Purchases</button></li>
-      <li class="nav-item"><button class="nav-link" [class.active]="activeTab === 'stock'" (click)="setTab('stock')">Stock</button></li>
+      <li class="nav-item"><button class="nav-link" [class.active]="activeTab === 'stock'" (click)="setTab('stock')">Stock / Low stock</button></li>
       <li class="nav-item"><button class="nav-link" [class.active]="activeTab === 'profit'" (click)="setTab('profit')">Profit</button></li>
       <li class="nav-item"><button class="nav-link" [class.active]="activeTab === 'expenses'" (click)="setTab('expenses')">Expenses</button></li>
     </ul>
@@ -21,17 +21,48 @@
         <button type="button" class="btn btn-outline-secondary" (click)="applyDateRange('week')">This week</button>
         <button type="button" class="btn btn-outline-secondary" (click)="applyDateRange('month')">This month</button>
       </div>
-      <input type="date" class="form-control" [(ngModel)]="fromDate" />
-      <input type="date" class="form-control" [(ngModel)]="toDate" />
-      <button class="btn btn-primary" (click)="setTab(activeTab)" [disabled]="loading">Refresh</button>
+      <input type="date" class="form-control" [(ngModel)]="fromDate" (change)="reloadActiveReport()" />
+      <input type="date" class="form-control" [(ngModel)]="toDate" (change)="reloadActiveReport()" />
+      <app-searchable-select
+        *ngIf="activeTab === 'sales' || activeTab === 'purchases'"
+        [(ngModel)]="productId"
+        [items]="productSelectOptions"
+        [nullable]="true"
+        [wide]="true"
+        nullLabel="All items"
+        placeholder="Filter by item..."
+        (searchChange)="onProductSearch($event)"
+        (selectionChange)="onProductSelected($event)" />
+      <button class="btn btn-primary" (click)="reloadActiveReport()" [disabled]="loading">Refresh</button>
       <label class="report-toggle" *ngIf="activeTab === 'sales' || activeTab === 'purchases'">
         <input type="checkbox" [(ngModel)]="hideFullyReturned" (change)="onHideFullyReturnedChange()" />
         Hide fully returned invoices
       </label>
+      <span class="hint-text ms-2" *ngIf="(activeTab === 'sales' || activeTab === 'purchases') && productId">
+        Filtering by selected item
+      </span>
     </div>
     <div class="toolbar" *ngIf="activeTab === 'stock'">
+      <app-searchable-select
+        [ngModel]="stockView"
+        [items]="stockViewOptions"
+        placeholder="View"
+        (selectionChange)="onStockViewChange($event)" />
+      <app-searchable-select
+        *ngIf="stockView === 'low' && !lowStockUseMinLevel"
+        [ngModel]="lowStockMax"
+        [items]="lowStockThresholdOptions"
+        placeholder="Threshold"
+        (selectionChange)="onLowStockThresholdChange($event)" />
+      <label class="report-toggle" *ngIf="stockView === 'low'">
+        <input type="checkbox" [(ngModel)]="lowStockUseMinLevel" (change)="onStockFiltersChange()" />
+        At / below each item’s min level
+      </label>
       <input class="form-control" placeholder="Search product..." [(ngModel)]="search" (keyup.enter)="loadStock()" />
-      <button class="btn btn-primary" (click)="loadStock()" [disabled]="loading">Search</button>
+      <button class="btn btn-primary" (click)="loadStock()" [disabled]="loading">Refresh</button>
+      <span class="hint-text" *ngIf="stockView === 'low' && !loading">
+        {{ stockRows.length }} low-stock item{{ stockRows.length === 1 ? '' : 's' }}
+      </span>
     </div>
 
     <div *ngIf="loading" class="loading-row">Loading...</div>
@@ -41,23 +72,40 @@
         <div class="col-md-4"><div class="stat-card"><span>Gross sales</span><strong>{{ s.grossSales | number:'1.2-2' }}</strong></div></div>
         <div class="col-md-4"><div class="stat-card"><span>Returns in period</span><strong class="text-danger">−{{ s.returnsInPeriod | number:'1.2-2' }}</strong></div></div>
         <div class="col-md-4"><div class="stat-card"><span>Net sales</span><strong>{{ s.netSales | number:'1.2-2' }}</strong></div></div>
-        <div class="col-md-6"><div class="stat-card"><span>Net profit (after returns)</span><strong>{{ s.netProfit | number:'1.2-2' }}</strong></div></div>
-        <div class="col-md-6"><div class="stat-card stat-card--muted"><span>Gross profit before returns</span><strong>{{ s.grossProfit | number:'1.2-2' }}</strong></div></div>
+        <div class="col-md-6"><div class="stat-card"><span>Net profit (after returns)</span><strong><app-masked-profit [value]="s.netProfit"></app-masked-profit></strong></div></div>
+        <div class="col-md-6"><div class="stat-card stat-card--muted"><span>Gross profit before returns</span><strong><app-masked-profit [value]="s.grossProfit"></app-masked-profit></strong></div></div>
       </div>
       <div class="data-table-wrap">
         <table class="data-table">
-          <thead><tr><th>Invoice</th><th>Date</th><th>Customer</th><th>Gross</th><th>Returned</th><th>Net</th><th>Net profit</th><th>Status</th></tr></thead>
+          <thead>
+            <tr>
+              <th>Invoice</th>
+              <th>Date</th>
+              <th>Customer</th>
+              <th>Items</th>
+              <th>Gross</th>
+              <th>Returned</th>
+              <th>Net</th>
+              <th>Net profit <app-masked-profit></app-masked-profit></th>
+              <th>Status</th>
+              <th class="col-actions">Actions</th>
+            </tr>
+          </thead>
           <tbody>
-            <tr *ngIf="salesRows.length === 0" class="empty-row"><td colspan="8">No active sales in range{{ hideFullyReturned ? ' (fully returned invoices are hidden)' : '' }}.</td></tr>
+            <tr *ngIf="salesRows.length === 0" class="empty-row"><td colspan="10">No active sales in range{{ hideFullyReturned ? ' (fully returned invoices are hidden)' : '' }}{{ productId ? ' for the selected item' : '' }}.</td></tr>
             <tr *ngFor="let r of salesRows" [class.row-muted]="r.returnStatus === 'Partial'">
               <td>{{ r.saleNumber }}</td>
               <td>{{ r.saleDate | appDate }}</td>
               <td>{{ r.customerName || '—' }}</td>
+              <td class="items-cell" [title]="r.itemsSummary">{{ r.itemsSummary || '—' }}</td>
               <td>{{ r.grandTotal | number:'1.2-2' }}</td>
               <td class="text-danger">{{ r.returnedAmount > 0 ? ('−' + (r.returnedAmount | number:'1.2-2')) : '—' }}</td>
               <td><strong>{{ r.netAmount | number:'1.2-2' }}</strong></td>
-              <td>{{ r.netProfitAmount | number:'1.2-2' }}</td>
+              <td><app-masked-profit [value]="r.netProfitAmount" [showToggle]="false"></app-masked-profit></td>
               <td><span class="badge-return" *ngIf="returnStatusLabel(r.returnStatus)">{{ returnStatusLabel(r.returnStatus) }}</span></td>
+              <td class="col-actions">
+                <a class="btn btn-sm btn-outline-primary" [routerLink]="['/transactions/sales']" [queryParams]="{ id: r.saleId, from: 'reports' }">View</a>
+              </td>
             </tr>
           </tbody>
         </table>
@@ -72,17 +120,33 @@
       </div>
       <div class="data-table-wrap">
         <table class="data-table">
-          <thead><tr><th>Purchase</th><th>Date</th><th>Supplier</th><th>Gross</th><th>Returned</th><th>Net</th><th>Status</th></tr></thead>
+          <thead>
+            <tr>
+              <th>Purchase</th>
+              <th>Date</th>
+              <th>Supplier</th>
+              <th>Items</th>
+              <th>Gross</th>
+              <th>Returned</th>
+              <th>Net</th>
+              <th>Status</th>
+              <th class="col-actions">Actions</th>
+            </tr>
+          </thead>
           <tbody>
-            <tr *ngIf="purchaseRows.length === 0" class="empty-row"><td colspan="7">No active purchases in range{{ hideFullyReturned ? ' (fully returned invoices are hidden)' : '' }}.</td></tr>
+            <tr *ngIf="purchaseRows.length === 0" class="empty-row"><td colspan="9">No active purchases in range{{ hideFullyReturned ? ' (fully returned invoices are hidden)' : '' }}{{ productId ? ' for the selected item' : '' }}.</td></tr>
             <tr *ngFor="let r of purchaseRows" [class.row-muted]="r.returnStatus === 'Partial'">
               <td>{{ r.purchaseNumber }}</td>
               <td>{{ r.invoiceDate | appDate }}</td>
               <td>{{ r.supplierName }}</td>
+              <td class="items-cell" [title]="r.itemsSummary">{{ r.itemsSummary || '—' }}</td>
               <td>{{ r.grandTotal | number:'1.2-2' }}</td>
               <td class="text-danger">{{ r.returnedAmount > 0 ? ('−' + (r.returnedAmount | number:'1.2-2')) : '—' }}</td>
               <td><strong>{{ r.netAmount | number:'1.2-2' }}</strong></td>
               <td><span class="badge-return" *ngIf="returnStatusLabel(r.returnStatus)">{{ returnStatusLabel(r.returnStatus) }}</span></td>
+              <td class="col-actions">
+                <a class="btn btn-sm btn-outline-primary" [routerLink]="['/transactions/purchases']" [queryParams]="{ id: r.purchaseId, from: 'reports' }">View</a>
+              </td>
             </tr>
           </tbody>
         </table>
@@ -91,14 +155,30 @@
 
     <div *ngIf="!loading && activeTab === 'stock'" class="data-table-wrap">
       <table class="data-table">
-        <thead><tr><th>Product</th><th>SKU</th><th>Category</th><th>Stock</th><th>WAC</th><th>Value</th><th>Sell Price</th></tr></thead>
+        <thead>
+          <tr>
+            <th>Product</th>
+            <th>SKU</th>
+            <th>Category</th>
+            <th>Stock</th>
+            <th>Min level</th>
+            <th>WAC</th>
+            <th>Value</th>
+            <th>Sell Price</th>
+          </tr>
+        </thead>
         <tbody>
-          <tr *ngIf="stockRows.length === 0" class="empty-row"><td colspan="7">No products found.</td></tr>
-          <tr *ngFor="let r of stockRows">
+          <tr *ngIf="stockRows.length === 0" class="empty-row">
+            <td colspan="8">
+              {{ stockView === 'low' ? 'No low-stock items for this filter.' : 'No products found.' }}
+            </td>
+          </tr>
+          <tr *ngFor="let r of stockRows" [class.row-muted]="r.currentStock <= 0" [class.text-danger]="r.currentStock > 0 && r.currentStock <= 5">
             <td>{{ r.productName }}</td>
             <td>{{ r.sku }}</td>
             <td>{{ r.categoryName }}</td>
-            <td>{{ r.currentStock }}</td>
+            <td><strong>{{ r.currentStock | number:'1.0-2' }}</strong></td>
+            <td>{{ (r.minimumStock ?? 0) | number:'1.0-2' }}</td>
             <td>{{ r.weightedAverageCost | number:'1.2-2' }}</td>
             <td>{{ r.inventoryValue | number:'1.2-2' }}</td>
             <td>{{ r.sellingPrice | number:'1.2-2' }}</td>
@@ -126,8 +206,8 @@
     <div *ngIf="!loading && activeTab === 'profit' && profit as profitSummary" class="row g-3">
       <div class="col-md-3"><div class="stat-card"><span>Net Sales</span><strong>{{ profitSummary.totalSales | number:'1.2-2' }}</strong></div></div>
       <div class="col-md-3"><div class="stat-card"><span>COGS</span><strong>{{ profitSummary.totalCost | number:'1.2-2' }}</strong></div></div>
-      <div class="col-md-3"><div class="stat-card"><span>Gross Profit</span><strong>{{ profitSummary.grossProfit | number:'1.2-2' }}</strong></div></div>
-      <div class="col-md-3"><div class="stat-card"><span>Net Profit</span><strong>{{ profitSummary.netProfit | number:'1.2-2' }}</strong></div></div>
+      <div class="col-md-3"><div class="stat-card"><span>Gross Profit</span><strong><app-masked-profit [value]="profitSummary.grossProfit"></app-masked-profit></strong></div></div>
+      <div class="col-md-3"><div class="stat-card"><span>Net Profit</span><strong><app-masked-profit [value]="profitSummary.netProfit"></app-masked-profit></strong></div></div>
       <div class="col-md-12">
         <p class="hint-text mb-0">
           Expenses in period: {{ profitSummary.totalExpenses | number:'1.2-2' }}

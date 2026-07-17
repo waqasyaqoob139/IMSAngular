@@ -194,6 +194,7 @@
               <app-txn-product-browse
                 [open]="productBrowseOpen"
                 [products]="browseProducts"
+                [searchMode]="productSearchMode"
                 priceLabel="Cost"
                 (closed)="closeProductBrowse()"
                 (selected)="onBrowseProductSelected($event)">
@@ -229,7 +230,7 @@
                                 id="purchase-line-product-search"
                                 class="form-control line-product-search-input"
                                 data-txn-focus="product-search"
-                                placeholder="Search product — Enter to add"
+                                [placeholder]="productSearchPlaceholderText"
                                 [(ngModel)]="productSearch"
                                 [ngModelOptions]="{standalone: true}"
                                 (input)="onProductSearchInput()"
@@ -274,7 +275,9 @@
                                 [attr.aria-selected]="pi === highlightedProductIndex"
                                 (mousedown)="$event.preventDefault(); addProductFromPicker(p)">
                                 <span class="product-picker__name">{{ p.productName }}</span>
-                                <span class="product-picker__meta">{{ p.sku }} · Stock {{ p.currentStock }} · Cost {{ p.purchaseCost | number:'1.2-2' }}</span>
+                                <span class="product-picker__meta">
+                                  <ng-container *ngIf="p.serialNo">#{{ p.serialNo }} · </ng-container>{{ p.sku }} · Stock {{ p.currentStock }} · Cost {{ p.purchaseCost | number:'1.2-2' }}
+                                </span>
                               </li>
                             </ul>
                           </div>

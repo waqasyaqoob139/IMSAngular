@@ -2,6 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import { FormArray, FormBuilder, Validators } from '@angular/forms';
 import { finalize } from 'rxjs';
 import { ApiService } from '../../../core/services/api.service';
+import { LookupsService } from '../../../core/services/lookups.service';
 import { getApiErrorMessage, PaginatedList } from '../../../core/models/api.models';
 import { mapNamedOptions, mapProductOptions, SearchableSelectOption } from '../../../shared/components/searchable-select/searchable-select.models';
 import { todayIsoDate } from '../../../core/utils/date-format';
@@ -95,7 +96,11 @@ export class VendorClaimsComponent implements OnInit {
     return mapProductOptions(this.products);
   }
 
-  constructor(private api: ApiService, private fb: FormBuilder) {
+  constructor(
+    private api: ApiService,
+    private fb: FormBuilder,
+    private lookupsService: LookupsService
+  ) {
     this.createForm = this.fb.group({
       supplierId: [null as number | null, Validators.required],
       locationId: [null as number | null, Validators.required],
@@ -112,7 +117,6 @@ export class VendorClaimsComponent implements OnInit {
   ngOnInit(): void {
     this.load();
     this.loadLookups();
-    this.loadProducts();
   }
 
   get createLines(): FormArray {
@@ -170,14 +174,13 @@ export class VendorClaimsComponent implements OnInit {
   }
 
   loadLookups(): void {
-    this.api.get<PaginatedList<{ supplierId: number; supplierName: string }>>('/suppliers', { pageSize: 500 }).subscribe({
-      next: res => {
-        this.suppliers = (res.data?.items ?? []).map(s => ({ id: s.supplierId, name: s.supplierName }));
-      }
-    });
-    this.api.get<{ locations?: Array<{ id: number; name: string }> }>('/lookups').subscribe({
-      next: res => {
-        this.locations = (res.data?.locations ?? []).map(l => ({
+    this.lookupsService.getLookups().subscribe({
+      next: data => {
+        this.suppliers = (data.suppliers ?? []).map(s => ({
+          id: Number((s as { id?: number }).id),
+          name: String((s as { name?: string }).name)
+        }));
+        this.locations = (data.locations ?? []).map(l => ({
           id: Number((l as { id?: number }).id),
           name: String((l as { name?: string }).name)
         }));
@@ -199,6 +202,9 @@ export class VendorClaimsComponent implements OnInit {
   }
 
   openCreate(): void {
+    if (!this.products.length) {
+      this.loadProducts();
+    }
     this.showForm = true;
     this.viewId = null;
     this.viewDetail = null;

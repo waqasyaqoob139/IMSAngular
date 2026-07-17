@@ -1,10 +1,16 @@
 import { Component, ElementRef, EventEmitter, Input, OnChanges, OnDestroy, Output, SimpleChanges, ViewChild } from '@angular/core';
 import { focusTxnElement } from '../../../core/utils/txn-keyboard';
+import {
+  filterProductsBySearchMode,
+  productBrowsePlaceholder,
+  ProductSearchMode
+} from '../../../core/utils/product-search';
 
 export interface TxnBrowseProduct {
   productId: number;
   productName: string;
   sku: string;
+  serialNo?: string | null;
   stock: number;
   price: number;
 }
@@ -18,6 +24,7 @@ export class TxnProductBrowseComponent implements OnChanges, OnDestroy {
   @Input() open = false;
   @Input() products: TxnBrowseProduct[] = [];
   @Input() priceLabel = 'Price';
+  @Input() searchMode: ProductSearchMode = 'Both';
 
   @Output() closed = new EventEmitter<void>();
   @Output() selected = new EventEmitter<TxnBrowseProduct>();
@@ -31,11 +38,11 @@ export class TxnProductBrowseComponent implements OnChanges, OnDestroy {
   constructor(private readonly hostRef: ElementRef<HTMLElement>) {}
 
   get filteredProducts(): TxnBrowseProduct[] {
-    const q = this.filter.trim().toLowerCase();
-    if (!q) return this.products;
-    return this.products.filter(
-      p => p.productName.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q)
-    );
+    return filterProductsBySearchMode(this.products, this.filter, this.searchMode);
+  }
+
+  get searchPlaceholder(): string {
+    return productBrowsePlaceholder(this.searchMode);
   }
 
   ngOnChanges(changes: SimpleChanges): void {
