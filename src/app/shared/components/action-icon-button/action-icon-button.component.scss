@@ -1,6 +1,6 @@
 .action-icon-button {
-  width: 2rem;
-  height: 2rem;
+  width: 1.625rem;
+  height: 1.625rem;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -12,8 +12,8 @@
   transition: color 120ms ease, background-color 120ms ease, box-shadow 120ms ease;
 
   svg {
-    width: 1rem;
-    height: 1rem;
+    width: 0.875rem;
+    height: 0.875rem;
     fill: none;
     stroke: currentColor;
     stroke-linecap: round;

@@ -44,7 +44,7 @@
     </div>
   </div>
 
-  <div *ngIf="errorMessage" class="alert alert-danger mb-2 py-2">{{ errorMessage }}</div>
+  <app-ui-alert [message]="errorMessage" severity="danger" (dismissed)="errorMessage = ''" />
   <div *ngIf="!loading && !data && !errorMessage" class="alert alert-secondary mb-2 py-2">No dashboard data.</div>
 
   <ng-container *ngIf="!loading && data">

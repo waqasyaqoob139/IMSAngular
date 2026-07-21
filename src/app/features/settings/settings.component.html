@@ -1,6 +1,6 @@
 <div class="page-shell settings-page">
-  <div *ngIf="message" class="alert alert-success py-2">{{ message }}</div>
-  <div *ngIf="errorMessage" class="alert alert-danger py-2">{{ errorMessage }}</div>
+  <app-ui-alert [message]="message" severity="success" (dismissed)="message = ''" />
+  <app-ui-alert [message]="errorMessage" severity="danger" (dismissed)="errorMessage = ''" />
 
   <div class="page-header settings-page__header">
     <h4>Settings</h4>

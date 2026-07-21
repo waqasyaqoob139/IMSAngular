@@ -5,8 +5,8 @@ export type QueryParamValue = string | number | boolean | undefined;
 export type QueryParams = Record<string, QueryParamValue>;
 
 export class ListPagination {
-  static readonly defaultPageSize = 25;
-  static readonly pageSizeOptions = [25, 50, 100] as const;
+  static readonly defaultPageSize = 15;
+  static readonly pageSizeOptions = [15, 25, 50, 100] as const;
   /**
    * Product / party pickers: load a page from the API, then type to search the rest.
    * Do NOT use huge values — that freezes the UI on client machines.

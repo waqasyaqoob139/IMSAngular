@@ -62,6 +62,10 @@ body {
   color: var(--ims-text);
   background: var(--ims-body-bg);
   min-height: 100vh;
+
+  &.ui-dialog-open {
+    overflow: hidden;
+  }
 }
 
 h4 {
@@ -1152,6 +1156,7 @@ app-searchable-select.searchable-select--wide {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.8125rem;
+  line-height: 1.2;
   margin: 0;
 
   thead th {
@@ -1161,14 +1166,14 @@ app-searchable-select.searchable-select--wide {
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.03em;
-    padding: 0.5rem 0.75rem;
+    padding: 0.35rem 0.625rem;
     border: 1px solid var(--ims-border);
     border-bottom: 2px solid var(--ims-primary);
     white-space: nowrap;
   }
 
   tbody td {
-    padding: 0.45rem 0.75rem;
+    padding: 0.25rem 0.625rem;
     border: 1px solid var(--ims-border);
     color: var(--ims-text);
     vertical-align: middle;

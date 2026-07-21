@@ -7,6 +7,7 @@ import { ApiService } from '../../../core/services/api.service';
 import { ExportPrintService } from '../../../core/services/export-print.service';
 import { SaleReceiptService } from '../../../core/services/sale-receipt.service';
 import { LookupsService } from '../../../core/services/lookups.service';
+import { UiDialogService } from '../../../core/services/ui-dialog.service';
 import {
   SaleHoldFormValue,
   TxnHoldDraft,
@@ -154,7 +155,8 @@ export class SalesComponent implements OnInit, OnDestroy {
     private txnHold: TxnHoldService,
     private lookupsService: LookupsService,
     private cdr: ChangeDetectorRef,
-    private sanitizer: DomSanitizer
+    private sanitizer: DomSanitizer,
+    private dialogs: UiDialogService
   ) {
     this.form = this.fb.group({
       customerId: [null as number | null],
@@ -1519,13 +1521,17 @@ export class SalesComponent implements OnInit, OnDestroy {
     this.openList();
   }
 
-  clearAll(): void {
+  async clearAll(): Promise<void> {
     if (this.saving) return;
     if (
       this.filledLineIndices.length > 0 ||
       this.hasDraftContent()
     ) {
-      if (!confirm('Clear this sale form? All entered lines will be removed.')) return;
+      if (!(await this.dialogs.confirm('Clear this sale form? All entered lines will be removed.', {
+        title: 'Clear Sale',
+        severity: 'warning',
+        confirmLabel: 'Clear'
+      }))) return;
     }
     this.txnHold.clearActiveDraft('sale');
     this.router.navigate(['/transactions/sales'], { replaceUrl: true });

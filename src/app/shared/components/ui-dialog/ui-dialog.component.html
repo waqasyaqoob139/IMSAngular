@@ -1,0 +1,42 @@
+<ng-container *ngIf="state$ | async as dialog">
+  <div class="ui-dialog-backdrop" aria-hidden="true"></div>
+  <div class="ui-dialog-shell" (mousedown)="$event.target === $event.currentTarget && dialogs.close(false)">
+    <section
+      class="ui-dialog"
+      [ngClass]="'ui-dialog--' + dialog.severity"
+      role="alertdialog"
+      aria-modal="true"
+      aria-labelledby="ui-dialog-title"
+      aria-describedby="ui-dialog-message">
+      <div class="ui-dialog__icon" aria-hidden="true">
+        <span *ngIf="dialog.severity === 'success'">✓</span>
+        <span *ngIf="dialog.severity === 'danger'">!</span>
+        <span *ngIf="dialog.severity === 'warning'">!</span>
+        <span *ngIf="dialog.severity === 'info'">i</span>
+      </div>
+
+      <div class="ui-dialog__content">
+        <h2 id="ui-dialog-title">{{ dialog.title }}</h2>
+        <p id="ui-dialog-message">{{ dialog.message }}</p>
+      </div>
+
+      <div class="ui-dialog__actions">
+        <button
+          *ngIf="dialog.kind === 'confirm'"
+          type="button"
+          class="btn btn-outline-secondary"
+          (click)="dialogs.close(false)">
+          {{ dialog.cancelLabel }}
+        </button>
+        <button
+          #primaryButton
+          type="button"
+          class="btn"
+          [ngClass]="dialog.severity === 'danger' ? 'btn-danger' : 'btn-primary'"
+          (click)="dialogs.close(true)">
+          {{ dialog.confirmLabel }}
+        </button>
+      </div>
+    </section>
+  </div>
+</ng-container>

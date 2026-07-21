@@ -4,6 +4,7 @@ import { FormBuilder, Validators } from '@angular/forms';
 import { finalize } from 'rxjs';
 import { ApiService } from '../../../core/services/api.service';
 import { AuthService } from '../../../core/services/auth.service';
+import { UiDialogService } from '../../../core/services/ui-dialog.service';
 import { PaginatedList, getApiErrorMessage } from '../../../core/models/api.models';
 import {
   PERMISSIONS,
@@ -85,7 +86,12 @@ export class UsersRolesComponent implements OnInit {
     return this.roles.map(r => ({ value: r.roleId, label: r.roleName }));
   }
 
-  constructor(private api: ApiService, private auth: AuthService, private fb: FormBuilder) {
+  constructor(
+    private api: ApiService,
+    private auth: AuthService,
+    private fb: FormBuilder,
+    private dialogs: UiDialogService
+  ) {
     this.userForm = this.fb.group({
       username: ['', Validators.required],
       fullName: ['', Validators.required],
@@ -332,8 +338,11 @@ export class UsersRolesComponent implements OnInit {
     });
   }
 
-  deleteUser(user: AppUser): void {
-    if (!confirm(`Remove user "${user.fullName}"? They will no longer be able to sign in.`)) return;
+  async deleteUser(user: AppUser): Promise<void> {
+    if (!(await this.dialogs.confirm(
+      `Remove user "${user.fullName}"? They will no longer be able to sign in.`,
+      { title: 'Delete User', severity: 'danger', confirmLabel: 'Delete' }
+    ))) return;
     this.api.delete(`/users/${user.userId}`).subscribe({
       next: () => {
         this.message = 'User removed.';
@@ -434,9 +443,13 @@ export class UsersRolesComponent implements OnInit {
     });
   }
 
-  deleteRole(role: AppRole): void {
+  async deleteRole(role: AppRole): Promise<void> {
     if (role.isSystem) return;
-    if (!confirm(`Delete role "${role.roleName}"?`)) return;
+    if (!(await this.dialogs.confirm(`Delete role "${role.roleName}"?`, {
+      title: 'Delete Role',
+      severity: 'danger',
+      confirmLabel: 'Delete'
+    }))) return;
     this.api.delete(`/roles/${role.roleId}`).subscribe({
       next: () => {
         this.message = 'Role deleted.';

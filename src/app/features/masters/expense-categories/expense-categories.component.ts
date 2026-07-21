@@ -3,6 +3,7 @@ import { FormBuilder, Validators } from '@angular/forms';
 import { finalize } from 'rxjs';
 import { ApiService } from '../../../core/services/api.service';
 import { LookupsService } from '../../../core/services/lookups.service';
+import { UiDialogService } from '../../../core/services/ui-dialog.service';
 import { PaginatedList } from '../../../core/models/api.models';
 import { blockSaveIfInvalid } from '../../../core/utils/form-validation';
 import { ListPagination } from '../../../core/utils/list-pagination';
@@ -33,7 +34,8 @@ export class ExpenseCategoriesComponent implements OnInit {
   constructor(
     private api: ApiService,
     private fb: FormBuilder,
-    private lookupsService: LookupsService
+    private lookupsService: LookupsService,
+    private dialogs: UiDialogService
   ) {
     this.form = this.fb.group({
       categoryName: ['', Validators.required],
@@ -125,8 +127,12 @@ export class ExpenseCategoriesComponent implements OnInit {
     });
   }
 
-  remove(item: ExpenseCategory): void {
-    if (!confirm(`Delete "${item.categoryName}"?`)) return;
+  async remove(item: ExpenseCategory): Promise<void> {
+    if (!(await this.dialogs.confirm(`Delete "${item.categoryName}"?`, {
+      title: 'Delete Expense Category',
+      severity: 'danger',
+      confirmLabel: 'Delete'
+    }))) return;
     this.loading = true;
     this.api
       .delete(`/expense-categories/${item.expenseCategoryId}`)

@@ -3,6 +3,7 @@ import { FormBuilder, Validators } from '@angular/forms';
 import { finalize } from 'rxjs';
 import { ApiService } from '../../../core/services/api.service';
 import { LookupsService } from '../../../core/services/lookups.service';
+import { UiDialogService } from '../../../core/services/ui-dialog.service';
 import { PaginatedList } from '../../../core/models/api.models';
 import { blockSaveIfInvalid } from '../../../core/utils/form-validation';
 import { ListPagination } from '../../../core/utils/list-pagination';
@@ -35,7 +36,8 @@ export class UnitsComponent implements OnInit {
   constructor(
     private api: ApiService,
     private fb: FormBuilder,
-    private lookupsService: LookupsService
+    private lookupsService: LookupsService,
+    private dialogs: UiDialogService
   ) {
     this.form = this.fb.group({
       unitName: ['', Validators.required],
@@ -132,8 +134,12 @@ export class UnitsComponent implements OnInit {
     });
   }
 
-  remove(unit: Unit): void {
-    if (!confirm(`Delete unit "${unit.unitName}"?`)) return;
+  async remove(unit: Unit): Promise<void> {
+    if (!(await this.dialogs.confirm(`Delete unit "${unit.unitName}"?`, {
+      title: 'Delete Unit',
+      severity: 'danger',
+      confirmLabel: 'Delete'
+    }))) return;
     this.loading = true;
     this.api
       .delete(`/units/${unit.unitId}`)
