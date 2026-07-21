@@ -18,6 +18,7 @@ interface PayrollRunListItem {
   totalNet: number;
   employeeCount: number;
   paidCount: number;
+  createdByUsername?: string | null;
 }
 
 interface PayrollLine {

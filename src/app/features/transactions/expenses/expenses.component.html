@@ -16,17 +16,20 @@
       <div class="data-table-wrap" *ngIf="!loading">
         <table class="data-table">
           <thead>
-            <tr><th>Expense #</th><th>Date</th><th>Category</th><th>Amount</th><th>Description</th><th class="col-actions">Actions</th></tr>
+            <tr><th>Expense #</th><th>Date</th><th>Category</th><th>Amount</th><th>Description</th><th>Created By</th><th class="col-actions">Actions</th></tr>
           </thead>
           <tbody>
-            <tr *ngIf="items.length === 0" class="empty-row"><td colspan="6">No expenses yet.</td></tr>
+            <tr *ngIf="items.length === 0" class="empty-row"><td colspan="7">No expenses yet.</td></tr>
             <tr *ngFor="let e of items">
               <td><strong>{{ e.expenseNumber }}</strong></td>
               <td>{{ e.expenseDate | appDate }}</td>
               <td>{{ e.categoryName }}</td>
               <td>{{ e.amount | number:'1.2-2' }}</td>
               <td>{{ e.description || '—' }}</td>
-              <td class="col-actions"><button class="btn btn-sm btn-outline-primary" (click)="openView(e)">View</button></td>
+              <td>{{ e.createdByUsername || '—' }}</td>
+              <td class="col-actions">
+                <app-action-icon-button icon="view" label="View expense" (activated)="openView(e)" />
+              </td>
             </tr>
           </tbody>
         </table>

@@ -43,8 +43,10 @@
               </td>
               <td>{{ u.lastLoginOn ? (u.lastLoginOn | appDate:'datetime') : '—' }}</td>
               <td class="col-actions">
-                <button type="button" class="btn btn-outline-primary btn-sm" *ngIf="canEditUser(u)" (click)="openEditUser(u)">Edit</button>
-                <button type="button" class="btn btn-outline-danger btn-sm ms-1" *ngIf="canDeleteUser(u)" (click)="deleteUser(u)">Remove</button>
+                <app-action-icon-button icon="edit" label="Edit user"
+                  *ngIf="canEditUser(u)" (activated)="openEditUser(u)" />
+                <app-action-icon-button class="ms-1" icon="delete" variant="danger" label="Delete user"
+                  *ngIf="canDeleteUser(u)" (activated)="deleteUser(u)" />
               </td>
             </tr>
             <tr *ngIf="!users.length" class="empty-row"><td colspan="6">No users yet. Click “Add User” to create one.</td></tr>
@@ -167,8 +169,9 @@
                 </div>
               </td>
               <td class="col-actions">
-                <button type="button" class="btn btn-outline-primary btn-sm" (click)="openEditRole(r)">Edit</button>
-                <button type="button" class="btn btn-outline-danger btn-sm ms-1" *ngIf="!r.isSystem" (click)="deleteRole(r)">Delete</button>
+                <app-action-icon-button icon="edit" label="Edit role" (activated)="openEditRole(r)" />
+                <app-action-icon-button class="ms-1" icon="delete" variant="danger" label="Delete role"
+                  *ngIf="!r.isSystem" (activated)="deleteRole(r)" />
               </td>
             </tr>
             <tr *ngIf="!roles.length" class="empty-row"><td colspan="4">No roles found.</td></tr>

@@ -19,6 +19,7 @@ interface ExpenseListItem {
   amount: number;
   paymentMethodName: string;
   description?: string;
+  createdByUsername?: string | null;
 }
 
 interface NamedOption {

@@ -46,13 +46,11 @@
             </td>
             <td class="text-end fw-semibold">{{ a.currentBalance | number:'1.2-2' }}</td>
             <td class="col-actions">
-              <button
-                type="button"
-                class="btn btn-sm btn-success"
-                (click)="save(a)"
-                [disabled]="savingId === a.accountId || !isDirty(a)">
-                {{ savingId === a.accountId ? 'Saving...' : 'Save' }}
-              </button>
+              <app-action-icon-button
+                icon="edit"
+                [label]="savingId === a.accountId ? 'Saving opening balance' : 'Save opening balance'"
+                [disabled]="savingId === a.accountId || !isDirty(a)"
+                (activated)="save(a)" />
             </td>
           </tr>
         </tbody>

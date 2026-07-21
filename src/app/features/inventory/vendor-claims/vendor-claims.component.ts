@@ -19,6 +19,7 @@ interface ClaimListItem {
   totalSent: number;
   totalReceived: number;
   totalPending: number;
+  createdByUsername?: string | null;
 }
 
 interface ClaimLine {

@@ -48,6 +48,7 @@ interface SaleListItem {
   balanceAmount: number;
   paymentStatus: number;
   totalProfitAmount: number;
+  createdByUsername?: string | null;
 }
 
 interface ProductOption {

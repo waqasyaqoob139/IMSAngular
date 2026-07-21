@@ -2,7 +2,7 @@
   <div *ngIf="message" class="alert alert-success">{{ message }}</div>
   <div *ngIf="errorMessage" class="alert alert-danger">{{ errorMessage }}</div>
 
-  <ng-container *ngIf="!showForm">
+  <ng-container *ngIf="!showForm && !loadingDetail && !viewDetail">
     <div class="page-header">
       <div>
         <h4>Stock Adjustments</h4>
@@ -15,10 +15,10 @@
       <div class="data-table-wrap" *ngIf="!loading">
         <table class="data-table">
           <thead>
-            <tr><th>Number</th><th>Date</th><th>Type</th><th>Location</th><th>Notes</th><th>Lines</th></tr>
+            <tr><th>Number</th><th>Adjustment Date</th><th>Type</th><th>Location</th><th>Notes</th><th>Lines</th><th>Created At</th><th>Created By</th><th class="col-actions">Actions</th></tr>
           </thead>
           <tbody>
-            <tr *ngIf="items.length === 0" class="empty-row"><td colspan="6">No adjustments yet.</td></tr>
+            <tr *ngIf="items.length === 0" class="empty-row"><td colspan="9">No adjustments yet.</td></tr>
             <tr *ngFor="let a of items">
               <td><strong>{{ a.adjustmentNumber }}</strong></td>
               <td>{{ a.adjustmentDate | appDate }}</td>
@@ -26,6 +26,11 @@
               <td>{{ a.locationName }}</td>
               <td>{{ a.reason }}</td>
               <td>{{ a.lineCount }}</td>
+              <td>{{ a.createdOn | appDate:'datetime' }}</td>
+              <td>{{ a.createdByUsername || '—' }}</td>
+              <td class="col-actions">
+                <app-action-icon-button icon="view" label="View stock adjustment" (activated)="openView(a)" />
+              </td>
             </tr>
           </tbody>
         </table>
@@ -37,6 +42,140 @@
         </app-list-pagination>
       </div>
     </div>
+  </ng-container>
+
+  <ng-container *ngIf="!showForm && (loadingDetail || viewDetail)">
+    <div class="adjustment-view-header">
+      <button type="button" class="btn-back" (click)="closeView()">← Back to adjustments</button>
+      <span>Stock adjustment details</span>
+    </div>
+
+    <div *ngIf="loadingDetail" class="adjustment-view-loading">
+      <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+      Loading adjustment details...
+    </div>
+
+    <main *ngIf="!loadingDetail && viewDetail as detail" class="adjustment-detail">
+      <section class="adjustment-hero">
+        <div class="adjustment-hero__top">
+          <div>
+            <span class="adjustment-hero__eyebrow">Adjustment record</span>
+            <h3>{{ detail.adjustmentNumber }}</h3>
+          </div>
+          <span class="adjustment-type-badge">{{ detail.adjustmentTypeName }}</span>
+        </div>
+
+        <div class="adjustment-facts">
+          <div class="adjustment-fact">
+            <span class="adjustment-fact__label">Adjustment date</span>
+            <strong>{{ detail.adjustmentDate | appDate }}</strong>
+          </div>
+          <div class="adjustment-fact">
+            <span class="adjustment-fact__label">Location</span>
+            <strong>{{ detail.locationName }}</strong>
+          </div>
+          <div class="adjustment-fact">
+            <span class="adjustment-fact__label">Products changed</span>
+            <strong>{{ detail.lines.length }}</strong>
+          </div>
+        </div>
+
+        <div class="adjustment-reason">
+          <span>Reason / notes</span>
+          <p>{{ detail.reason || 'No reason or notes were entered for this adjustment.' }}</p>
+        </div>
+      </section>
+
+      <section class="adjustment-audit-card">
+        <div class="adjustment-audit-card__title">
+          <span class="adjustment-audit-card__icon">✓</span>
+          <div>
+            <strong>Record history</strong>
+            <small>Who created or changed this adjustment</small>
+          </div>
+        </div>
+        <div class="adjustment-audit-events">
+          <div class="adjustment-audit-event">
+            <span class="adjustment-audit-event__dot"></span>
+            <div>
+              <span>Created by</span>
+              <strong>{{ detail.createdByUsername || 'Unknown user' }}</strong>
+              <small>{{ detail.createdOn | appDate:'datetime' }}</small>
+            </div>
+          </div>
+          <div class="adjustment-audit-event" *ngIf="detail.modifiedOn">
+            <span class="adjustment-audit-event__dot adjustment-audit-event__dot--modified"></span>
+            <div>
+              <span>Last modified by</span>
+              <strong>{{ detail.modifiedByUsername || 'Unknown user' }}</strong>
+              <small>{{ detail.modifiedOn | appDate:'datetime' }}</small>
+            </div>
+          </div>
+          <div class="adjustment-audit-event adjustment-audit-event--empty" *ngIf="!detail.modifiedOn">
+            <div>
+              <span>Last modified</span>
+              <strong>No changes after creation</strong>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="adjustment-changes-card">
+        <div class="adjustment-changes-head">
+          <div>
+            <span class="adjustment-changes-head__eyebrow">Inventory movement</span>
+            <h5>Stock changes</h5>
+            <p>Stock before and after this adjustment was posted.</p>
+          </div>
+          <span class="adjustment-item-count">{{ detail.lines.length }} {{ detail.lines.length === 1 ? 'item' : 'items' }}</span>
+        </div>
+        <div class="data-table-wrap">
+          <table class="data-table adjustment-detail-table">
+            <thead>
+              <tr>
+                <th>Product</th>
+                <th class="text-end">Before</th>
+                <th class="text-center">Change</th>
+                <th class="text-end">After</th>
+                <th class="text-end">Unit cost</th>
+                <th>Line notes</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngIf="detail.lines.length === 0" class="empty-row">
+                <td colspan="6">No stock changes were recorded.</td>
+              </tr>
+              <tr *ngFor="let line of detail.lines">
+                <td>
+                  <div class="adjustment-product">
+                    <span class="adjustment-product__mark">{{ line.productName.charAt(0) }}</span>
+                    <div>
+                      <strong>{{ line.productName }}</strong>
+                      <span>{{ line.sku || 'No SKU' }}</span>
+                    </div>
+                  </div>
+                </td>
+                <td class="text-end stock-value">
+                  {{ balanceBefore(line) == null ? '—' : (balanceBefore(line) | number:'1.0-4') }}
+                </td>
+                <td class="text-center">
+                  <span class="adjustment-change"
+                    [class.adjustment-change--in]="line.quantityChange > 0"
+                    [class.adjustment-change--out]="line.quantityChange < 0">
+                    {{ line.quantityChange > 0 ? '+' : '' }}{{ line.quantityChange | number:'1.0-4' }}
+                  </span>
+                </td>
+                <td class="text-end stock-value stock-value--after">
+                  {{ line.balanceAfter == null ? '—' : (line.balanceAfter | number:'1.0-4') }}
+                </td>
+                <td class="text-end">{{ line.unitCost | number:'1.2-2' }}</td>
+                <td class="adjustment-line-notes">{{ line.notes || '—' }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
   </ng-container>
 
   <ng-container *ngIf="showForm">
@@ -116,7 +255,8 @@
                   <input class="form-control form-control-sm" formControlName="notes" />
                 </td>
                 <td class="col-actions">
-                  <button type="button" class="btn btn-sm btn-outline-danger" (click)="removeLine(i)">×</button>
+                  <app-action-icon-button icon="remove" variant="danger" [label]="'Remove line ' + (i + 1)"
+                    (activated)="removeLine(i)" />
                 </td>
               </tr>
             </tbody>

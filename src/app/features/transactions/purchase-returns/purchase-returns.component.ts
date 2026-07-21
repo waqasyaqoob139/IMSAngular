@@ -17,6 +17,7 @@ interface ReturnListItem {
   purchaseNumber: string;
   supplierName: string;
   grandTotal: number;
+  createdByUsername?: string | null;
 }
 
 interface PurchaseOption {

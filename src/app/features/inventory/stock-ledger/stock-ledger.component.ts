@@ -20,6 +20,7 @@ interface LedgerRow {
   balanceQuantity: number;
   unitCost: number;
   totalCost: number;
+  createdByUsername?: string | null;
 }
 
 interface NamedOption {

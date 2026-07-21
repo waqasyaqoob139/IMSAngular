@@ -15,16 +15,17 @@
       <div class="data-table-wrap" *ngIf="!loading">
         <table class="data-table">
           <thead>
-            <tr><th>Number</th><th>Date</th><th>From</th><th>To</th><th>Lines</th></tr>
+            <tr><th>Number</th><th>Date</th><th>From</th><th>To</th><th>Lines</th><th>Created By</th></tr>
           </thead>
           <tbody>
-            <tr *ngIf="items.length === 0" class="empty-row"><td colspan="5">No transfers yet.</td></tr>
+            <tr *ngIf="items.length === 0" class="empty-row"><td colspan="6">No transfers yet.</td></tr>
             <tr *ngFor="let t of items">
               <td><strong>{{ t.transferNumber }}</strong></td>
               <td>{{ t.transferDate | appDate }}</td>
               <td>{{ t.fromLocationName }}</td>
               <td>{{ t.toLocationName }}</td>
               <td>{{ t.lineCount }}</td>
+              <td>{{ t.createdByUsername || '—' }}</td>
             </tr>
           </tbody>
         </table>
@@ -84,7 +85,10 @@
                   <small class="text-muted" *ngIf="loadingProducts">Loading…</small>
                 </td>
                 <td><input type="number" class="form-control form-control-sm" formControlName="quantity" step="0.01" min="0.01" /></td>
-                <td><button type="button" class="btn btn-sm btn-outline-danger" (click)="removeLine(i)">×</button></td>
+                <td>
+                  <app-action-icon-button icon="remove" variant="danger" [label]="'Remove line ' + (i + 1)"
+                    (activated)="removeLine(i)" />
+                </td>
               </tr>
             </tbody>
           </table>

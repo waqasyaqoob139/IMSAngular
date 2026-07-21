@@ -16,6 +16,7 @@ interface TransferListItem {
   fromLocationName: string;
   toLocationName: string;
   lineCount: number;
+  createdByUsername?: string | null;
 }
 
 interface ProductOption {

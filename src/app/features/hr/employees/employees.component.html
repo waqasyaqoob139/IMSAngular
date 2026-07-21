@@ -74,8 +74,8 @@
                 </span>
               </td>
               <td class="col-actions">
-                <button class="btn btn-sm btn-outline-primary me-1" (click)="openEdit(item)">Edit</button>
-                <button class="btn btn-sm btn-outline-danger" (click)="remove(item)">Delete</button>
+                <app-action-icon-button class="me-1" icon="edit" label="Edit employee" (activated)="openEdit(item)" />
+                <app-action-icon-button icon="delete" variant="danger" label="Delete employee" (activated)="remove(item)" />
               </td>
             </tr>
           </tbody>

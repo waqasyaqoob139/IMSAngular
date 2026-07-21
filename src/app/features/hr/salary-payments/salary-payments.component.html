@@ -46,6 +46,7 @@
               <th class="hr-money">Amount</th>
               <th>Method</th>
               <th>Remarks</th>
+              <th>Created By</th>
             </tr>
           </thead>
           <tbody>
@@ -59,6 +60,7 @@
               <td class="hr-money"><strong>{{ item.amount | number:'1.2-2' }}</strong></td>
               <td>{{ item.paymentMethodName }}</td>
               <td>{{ item.remarks || '—' }}</td>
+              <td>{{ item.createdByUsername || '—' }}</td>
             </tr>
           </tbody>
         </table>

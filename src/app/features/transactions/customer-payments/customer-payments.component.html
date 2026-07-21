@@ -37,7 +37,8 @@
               <td>{{ c.phone || '—' }}</td>
               <td class="text-end"><strong>{{ c.balance | number:'1.2-2' }}</strong></td>
               <td class="col-actions">
-                <button class="btn btn-sm btn-primary" (click)="collectFrom(c)">Collect</button>
+                <app-action-icon-button icon="edit"
+                  [label]="'Collect payment from ' + c.name" (activated)="collectFrom(c)" />
               </td>
             </tr>
           </tbody>
@@ -67,18 +68,19 @@
       <div class="data-table-wrap" *ngIf="!loading">
         <table class="data-table">
           <thead>
-            <tr><th>Receipt #</th><th>Date</th><th>Customer</th><th>Amount</th><th>Method</th><th class="col-actions">Actions</th></tr>
+            <tr><th>Receipt #</th><th>Date</th><th>Customer</th><th>Amount</th><th>Method</th><th>Created By</th><th class="col-actions">Actions</th></tr>
           </thead>
           <tbody>
-            <tr *ngIf="items.length === 0" class="empty-row"><td colspan="6">No payments yet.</td></tr>
+            <tr *ngIf="items.length === 0" class="empty-row"><td colspan="7">No payments yet.</td></tr>
             <tr *ngFor="let p of items">
               <td><strong>{{ p.paymentNumber }}</strong></td>
               <td>{{ p.paymentDate | appDate }}</td>
               <td>{{ p.customerName }}</td>
               <td>{{ p.amount | number:'1.2-2' }}</td>
               <td>{{ p.paymentMethodName }}</td>
+              <td>{{ p.createdByUsername || '—' }}</td>
               <td class="col-actions">
-                <button class="btn btn-sm btn-outline-primary" (click)="openView(p)">View</button>
+                <app-action-icon-button icon="view" label="View customer payment" (activated)="openView(p)" />
               </td>
             </tr>
           </tbody>

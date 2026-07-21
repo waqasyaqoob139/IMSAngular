@@ -17,6 +17,7 @@ interface SalaryPaymentItem {
   amount: number;
   paymentMethodName: string;
   remarks?: string;
+  createdByUsername?: string | null;
 }
 
 interface EmployeeOption {

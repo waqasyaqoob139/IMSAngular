@@ -16,6 +16,7 @@ interface ReturnListItem {
   saleNumber: string;
   customerName: string | null;
   grandTotal: number;
+  createdByUsername?: string | null;
 }
 
 interface SaleOption {

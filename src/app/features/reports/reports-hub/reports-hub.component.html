@@ -105,7 +105,8 @@
               <td><app-masked-profit [value]="r.netProfitAmount" [showToggle]="false"></app-masked-profit></td>
               <td><span class="badge-return" *ngIf="returnStatusLabel(r.returnStatus)">{{ returnStatusLabel(r.returnStatus) }}</span></td>
               <td class="col-actions">
-                <a class="btn btn-sm btn-outline-primary" [routerLink]="['/transactions/sales']" [queryParams]="{ id: r.saleId, from: 'reports' }">View</a>
+                <app-action-icon-button icon="view" label="View sale"
+                  [routerLink]="['/transactions/sales']" [queryParams]="{ id: r.saleId, from: 'reports' }" />
               </td>
             </tr>
           </tbody>
@@ -146,7 +147,8 @@
               <td><strong>{{ r.netAmount | number:'1.2-2' }}</strong></td>
               <td><span class="badge-return" *ngIf="returnStatusLabel(r.returnStatus)">{{ returnStatusLabel(r.returnStatus) }}</span></td>
               <td class="col-actions">
-                <a class="btn btn-sm btn-outline-primary" [routerLink]="['/transactions/purchases']" [queryParams]="{ id: r.purchaseId, from: 'reports' }">View</a>
+                <app-action-icon-button icon="view" label="View purchase"
+                  [routerLink]="['/transactions/purchases']" [queryParams]="{ id: r.purchaseId, from: 'reports' }" />
               </td>
             </tr>
           </tbody>

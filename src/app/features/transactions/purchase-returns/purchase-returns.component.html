@@ -16,17 +16,20 @@
       <div class="data-table-wrap" *ngIf="!loading">
         <table class="data-table">
           <thead>
-            <tr><th>Return #</th><th>Date</th><th>Purchase</th><th>Supplier</th><th>Amount</th><th class="col-actions">Actions</th></tr>
+            <tr><th>Return #</th><th>Date</th><th>Purchase</th><th>Supplier</th><th>Amount</th><th>Created By</th><th class="col-actions">Actions</th></tr>
           </thead>
           <tbody>
-            <tr *ngIf="items.length === 0" class="empty-row"><td colspan="6">No purchase returns yet.</td></tr>
+            <tr *ngIf="items.length === 0" class="empty-row"><td colspan="7">No purchase returns yet.</td></tr>
             <tr *ngFor="let r of items">
               <td><strong>{{ r.purchaseReturnNumber }}</strong></td>
               <td>{{ r.returnDate | appDate }}</td>
               <td>{{ r.purchaseNumber }}</td>
               <td>{{ r.supplierName }}</td>
               <td>{{ r.grandTotal | number:'1.2-2' }}</td>
-              <td class="col-actions"><button class="btn btn-sm btn-outline-primary" (click)="openView(r)">View</button></td>
+              <td>{{ r.createdByUsername || '—' }}</td>
+              <td class="col-actions">
+                <app-action-icon-button icon="view" label="View purchase return" (activated)="openView(r)" />
+              </td>
             </tr>
           </tbody>
         </table>

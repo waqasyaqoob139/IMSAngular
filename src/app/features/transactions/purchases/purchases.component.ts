@@ -44,6 +44,7 @@ interface PurchaseListItem {
   paidAmount: number;
   balanceAmount: number;
   paymentStatus: number;
+  createdByUsername?: string | null;
 }
 
 interface ProductOption {

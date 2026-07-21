@@ -17,6 +17,7 @@ interface PaymentListItem {
   supplierName: string;
   amount: number;
   paymentMethodName: string;
+  createdByUsername?: string | null;
 }
 
 interface PartyOption {

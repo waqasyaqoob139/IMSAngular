@@ -13,11 +13,39 @@ interface AdjustmentListItem {
   stockAdjustmentId: number;
   adjustmentNumber: string;
   adjustmentDate: string;
+  createdOn: string;
   locationName: string;
   adjustmentTypeId: number;
   adjustmentTypeName: string;
   reason: string;
   lineCount: number;
+  createdByUsername?: string | null;
+}
+
+interface AdjustmentDetailLine {
+  productId: number;
+  productName: string;
+  sku: string;
+  quantityChange: number;
+  unitCost: number;
+  notes?: string | null;
+  balanceAfter?: number | null;
+}
+
+interface AdjustmentDetail {
+  stockAdjustmentId: number;
+  adjustmentNumber: string;
+  adjustmentDate: string;
+  locationId: number;
+  locationName: string;
+  adjustmentTypeId: number;
+  adjustmentTypeName: string;
+  reason: string;
+  createdOn: string;
+  createdByUsername?: string | null;
+  modifiedOn?: string | null;
+  modifiedByUsername?: string | null;
+  lines: AdjustmentDetailLine[];
 }
 
 interface AdjustmentType {
@@ -61,7 +89,9 @@ export class StockAdjustmentsComponent implements OnInit, OnDestroy {
   saving = false;
   loadingProducts = false;
   loadingLocationStock = false;
+  loadingDetail = false;
   showForm = false;
+  viewDetail: AdjustmentDetail | null = null;
   message = '';
   errorMessage = '';
   form;
@@ -158,6 +188,29 @@ export class StockAdjustmentsComponent implements OnInit, OnDestroy {
           this.pagination.applyResponse(res.data);
         }
       });
+  }
+
+  openView(item: AdjustmentListItem): void {
+    this.showForm = false;
+    this.viewDetail = null;
+    this.loadingDetail = true;
+    this.errorMessage = '';
+    this.api
+      .get<AdjustmentDetail>(`/inventory/adjustments/${item.stockAdjustmentId}`)
+      .pipe(finalize(() => (this.loadingDetail = false)))
+      .subscribe({
+        next: res => (this.viewDetail = res.data ?? null),
+        error: err => (this.errorMessage = getApiErrorMessage(err, 'Could not load adjustment details.'))
+      });
+  }
+
+  closeView(): void {
+    this.viewDetail = null;
+  }
+
+  balanceBefore(line: AdjustmentDetailLine): number | null {
+    if (line.balanceAfter == null) return null;
+    return Number(line.balanceAfter) - Number(line.quantityChange);
   }
 
   loadLookups(): void {
@@ -305,6 +358,7 @@ export class StockAdjustmentsComponent implements OnInit, OnDestroy {
 
   openCreate(): void {
     this.products = [];
+    this.viewDetail = null;
     this.showForm = true;
     this.message = '';
     this.errorMessage = '';

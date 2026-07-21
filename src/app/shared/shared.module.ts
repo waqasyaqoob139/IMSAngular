@@ -7,6 +7,7 @@ import { PageNewShortcutDirective } from './directives/page-new-shortcut.directi
 import { SearchableSelectComponent } from './components/searchable-select/searchable-select.component';
 import { ListPaginationComponent } from './components/list-pagination/list-pagination.component';
 import { MaskedProfitComponent } from './components/masked-profit/masked-profit.component';
+import { ActionIconButtonComponent } from './components/action-icon-button/action-icon-button.component';
 
 @NgModule({
   imports: [
@@ -18,7 +19,8 @@ import { MaskedProfitComponent } from './components/masked-profit/masked-profit.
     PageNewShortcutDirective,
     SearchableSelectComponent,
     ListPaginationComponent,
-    MaskedProfitComponent
+    MaskedProfitComponent,
+    ActionIconButtonComponent
   ],
   exports: [
     CommonModule,
@@ -29,7 +31,8 @@ import { MaskedProfitComponent } from './components/masked-profit/masked-profit.
     PageNewShortcutDirective,
     SearchableSelectComponent,
     ListPaginationComponent,
-    MaskedProfitComponent
+    MaskedProfitComponent,
+    ActionIconButtonComponent
   ]
 })
 export class SharedModule {}

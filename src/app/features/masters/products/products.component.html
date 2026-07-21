@@ -111,8 +111,8 @@
                 </span>
               </td>
               <td class="col-actions">
-                <button class="btn btn-sm btn-outline-primary me-1" (click)="openEdit(p)">Edit</button>
-                <button class="btn btn-sm btn-outline-danger" (click)="remove(p)">Delete</button>
+                <app-action-icon-button class="me-1" icon="edit" label="Edit product" (activated)="openEdit(p)" />
+                <app-action-icon-button icon="delete" variant="danger" label="Delete product" (activated)="remove(p)" />
               </td>
             </tr>
           </tbody>

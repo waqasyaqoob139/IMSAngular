@@ -23,11 +23,11 @@
         <table class="data-table">
           <thead>
             <tr>
-              <th>Claim #</th><th>Date</th><th>Vendor</th><th>Sent</th><th>Received</th><th>Pending</th><th>Status</th><th></th>
+              <th>Claim #</th><th>Date</th><th>Vendor</th><th>Sent</th><th>Received</th><th>Pending</th><th>Status</th><th>Created By</th><th></th>
             </tr>
           </thead>
           <tbody>
-            <tr *ngIf="items.length === 0" class="empty-row"><td colspan="8">No claims yet.</td></tr>
+            <tr *ngIf="items.length === 0" class="empty-row"><td colspan="9">No claims yet.</td></tr>
             <tr *ngFor="let c of items">
               <td><strong>{{ c.claimNumber }}</strong></td>
               <td>{{ c.claimDate | appDate }}</td>
@@ -36,7 +36,10 @@
               <td>{{ c.totalReceived | number:'1.2-2' }}</td>
               <td><strong>{{ c.totalPending | number:'1.2-2' }}</strong></td>
               <td [class]="statusClass(c.status)">{{ c.statusName }}</td>
-              <td><button class="btn btn-sm btn-outline-primary" (click)="openView(c)">View</button></td>
+              <td>{{ c.createdByUsername || '—' }}</td>
+              <td>
+                <app-action-icon-button icon="view" label="View vendor claim" (activated)="openView(c)" />
+              </td>
             </tr>
           </tbody>
         </table>
@@ -97,7 +100,10 @@
                 </td>
                 <td><input type="number" class="form-control form-control-sm" formControlName="quantity" step="0.01" min="0.01" /></td>
                 <td><input type="number" class="form-control form-control-sm" formControlName="unitCost" step="0.01" min="0" /></td>
-                <td><button type="button" class="btn btn-sm btn-outline-danger" (click)="removeCreateLine(i)">×</button></td>
+                <td>
+                  <app-action-icon-button icon="remove" variant="danger" [label]="'Remove line ' + (i + 1)"
+                    (activated)="removeCreateLine(i)" />
+                </td>
               </tr>
             </tbody>
           </table>

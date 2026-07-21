@@ -27,12 +27,13 @@
               <th>Paid</th>
               <th>Due</th>
               <th>Status</th>
+              <th>Created By</th>
               <th class="col-actions">Actions</th>
             </tr>
           </thead>
           <tbody>
             <tr *ngIf="purchases.length === 0" class="empty-row">
-              <td colspan="8">No purchases yet. Click <strong>+ New Purchase</strong> to add stock.</td>
+              <td colspan="9">No purchases yet. Click <strong>+ New Purchase</strong> to add stock.</td>
             </tr>
             <tr *ngFor="let p of purchases">
               <td><strong>{{ p.purchaseNumber }}</strong></td>
@@ -49,8 +50,9 @@
                   {{ paymentStatusLabel(purchasePaymentStatus(p)) }}
                 </span>
               </td>
+              <td>{{ p.createdByUsername || '—' }}</td>
               <td class="col-actions">
-                <button class="btn btn-sm btn-outline-primary" (click)="openView(p)">View</button>
+                <app-action-icon-button icon="view" label="View purchase" (activated)="openView(p)" />
               </td>
             </tr>
           </tbody>
@@ -314,8 +316,9 @@
                         </td>
                         <td class="col-total line-total-cell">{{ lineTotal(lines.at(i).value) | number:'1.2-2' }}</td>
                         <td class="col-actions">
-                          <button type="button" class="btn btn-sm btn-link text-danger p-0 line-remove" tabindex="-1"
-                                  (click)="removeLine(i)" [disabled]="!canRemoveLine(i)" title="Remove">×</button>
+                          <app-action-icon-button icon="remove" variant="danger" [tabIndex]="-1"
+                            [label]="'Remove line ' + (i + 1)" [disabled]="!canRemoveLine(i)"
+                            (activated)="removeLine(i)" />
                         </td>
                       </ng-container>
                       <ng-template #trailingQtyCost>

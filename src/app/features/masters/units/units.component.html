@@ -32,8 +32,8 @@
                 </span>
               </td>
               <td class="col-actions">
-                <button class="btn btn-sm btn-outline-primary me-1" (click)="openEdit(unit)">Edit</button>
-                <button class="btn btn-sm btn-outline-danger" (click)="remove(unit)">Delete</button>
+                <app-action-icon-button class="me-1" icon="edit" label="Edit unit" (activated)="openEdit(unit)" />
+                <app-action-icon-button icon="delete" variant="danger" label="Delete unit" (activated)="remove(unit)" />
               </td>
             </tr>
           </tbody>

@@ -29,12 +29,13 @@
               <th>Due</th>
               <th>Profit <app-masked-profit></app-masked-profit></th>
               <th>Status</th>
+              <th>Created By</th>
               <th class="col-actions">Actions</th>
             </tr>
           </thead>
           <tbody>
             <tr *ngIf="sales.length === 0" class="empty-row">
-              <td colspan="9">No sales yet. Click <strong>+ New Sale</strong> to create one.</td>
+              <td colspan="10">No sales yet. Click <strong>+ New Sale</strong> to create one.</td>
             </tr>
             <tr *ngFor="let s of sales">
               <td><strong>{{ s.saleNumber }}</strong></td>
@@ -52,8 +53,9 @@
                   {{ paymentStatusLabel(salePaymentStatus(s)) }}
                 </span>
               </td>
+              <td>{{ s.createdByUsername || '—' }}</td>
               <td class="col-actions">
-                <button class="btn btn-sm btn-outline-primary" (click)="openView(s)">View</button>
+                <app-action-icon-button icon="view" label="View sale" (activated)="openView(s)" />
               </td>
             </tr>
           </tbody>
@@ -75,7 +77,8 @@
         <button type="button" class="txn-list-link" (click)="closeView()">← Back</button>
         <span class="toolbar-title">Sale {{ viewDetail?.['saleNumber'] || '...' }}</span>
         <div class="toolbar-actions">
-          <button type="button" class="btn btn-outline-secondary btn-sm" (click)="printView()" *ngIf="viewDetail">Print</button>
+          <app-action-icon-button icon="print" variant="secondary" label="Print sale"
+            (activated)="printView()" *ngIf="viewDetail" />
         </div>
       </div>
 
@@ -330,8 +333,9 @@
                         </td>
                         <td class="col-total line-total-cell">{{ lineTotal(lines.at(i).value) | number:'1.2-2' }}</td>
                         <td class="col-actions">
-                          <button type="button" class="btn btn-sm btn-link text-danger p-0 line-remove" tabindex="-1"
-                                  (click)="removeLine(i)" [disabled]="!canRemoveLine(i)" title="Remove">×</button>
+                          <app-action-icon-button icon="remove" variant="danger" [tabIndex]="-1"
+                            [label]="'Remove line ' + (i + 1)" [disabled]="!canRemoveLine(i)"
+                            (activated)="removeLine(i)" />
                         </td>
                       </ng-container>
                       <ng-template #trailingQtyPrice>
