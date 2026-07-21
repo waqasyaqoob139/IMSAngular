@@ -1,4 +1,5 @@
-import { Component, signal } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
+import { GlobalLoadingService } from './core/services/global-loading.service';
 
 @Component({
   selector: 'app-root',
@@ -8,4 +9,5 @@ import { Component, signal } from '@angular/core';
 })
 export class App {
   protected readonly title = signal('IMSAngular');
+  protected readonly loading$ = inject(GlobalLoadingService).visible$;
 }

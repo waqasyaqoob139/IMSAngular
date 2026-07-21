@@ -199,15 +199,18 @@ export class SettingsComponent implements OnInit {
   }
 
   private ensureBackupPathSetting(): void {
-    if (!this.appSettings.some(s => s.settingKey === 'DatabaseBackupPath')) {
+    const existing = this.appSettings.find(s => s.settingKey === 'DatabaseBackupPath');
+    if (existing) {
+      existing.settingValue = (existing.settingValue || 'D:\\InvDB.sql').replace(/\.bak$/i, '.sql');
+    } else {
       this.appSettings = [
         ...this.appSettings,
         {
           settingId: 0,
           settingKey: 'DatabaseBackupPath',
-          settingValue: 'D:\\InvDB.bak',
+          settingValue: 'D:\\InvDB.sql',
           category: 'System',
-          description: 'Database backup file path'
+          description: 'Portable database SQL backup path'
         }
       ];
     }
@@ -336,7 +339,7 @@ export class SettingsComponent implements OnInit {
       ProductSearchMode: 'Sale/purchase product search',
       EnableProductBulkUpload: 'Product sheet uploader on Products page',
       CostingMethodLocked: 'Inventory costing locked',
-      DatabaseBackupPath: 'Database backup file path'
+      DatabaseBackupPath: 'Portable SQL backup file path'
     };
     return map[key] ?? key;
   }
@@ -373,11 +376,11 @@ export class SettingsComponent implements OnInit {
 
     const path = setting.settingValue?.trim();
     if (!path) {
-      this.errorMessage = 'Enter a backup file path (for example D:\\InvDB.bak).';
+      this.errorMessage = 'Enter a SQL backup path (for example D:\\InvDB.sql).';
       return;
     }
-    if (!/\.bak$/i.test(path)) {
-      this.errorMessage = 'Backup path must end with .bak';
+    if (!/\.sql$/i.test(path)) {
+      this.errorMessage = 'Backup path must end with .sql';
       return;
     }
 

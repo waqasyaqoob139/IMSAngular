@@ -15,6 +15,7 @@ import { SettingsModule } from './features/settings/settings.module';
 import { UsersModule } from './features/users/users.module';
 import { HrModule } from './features/hr/hr.module';
 import { authInterceptor } from './core/interceptors/auth.interceptor';
+import { globalLoadingInterceptor } from './core/interceptors/global-loading.interceptor';
 
 @NgModule({
   declarations: [App],
@@ -35,7 +36,7 @@ import { authInterceptor } from './core/interceptors/auth.interceptor';
   providers: [
     provideZoneChangeDetection({ eventCoalescing: true }),
     provideBrowserGlobalErrorListeners(),
-    provideHttpClient(withInterceptors([authInterceptor]))
+    provideHttpClient(withInterceptors([globalLoadingInterceptor, authInterceptor]))
   ],
   bootstrap: [App]
 })

@@ -1,1 +1,17 @@
 <router-outlet></router-outlet>
+
+<div class="global-loader" *ngIf="loading$ | async" role="status" aria-live="polite" aria-label="Loading data">
+  <div class="global-loader__backdrop"></div>
+  <div class="global-loader__card">
+    <div class="global-loader__mark" aria-hidden="true">
+      <span></span>
+      <span></span>
+      <span></span>
+    </div>
+    <div class="global-loader__copy">
+      <strong>Loading</strong>
+      <span>Please wait while we prepare your data</span>
+    </div>
+    <div class="global-loader__progress" aria-hidden="true"><span></span></div>
+  </div>
+</div>

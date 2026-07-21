@@ -172,16 +172,16 @@
 
       <!-- Database backup -->
       <div class="settings-card settings-card--half">
-        <div class="settings-card__head">Database backup</div>
+        <div class="settings-card__head">Portable database backup</div>
         <div class="settings-card__body" *ngIf="backupPathSetting as backup">
-          <label class="form-label">Backup file path</label>
+          <label class="form-label">SQL script file path</label>
           <input
             class="form-control form-control-sm mb-2"
             [(ngModel)]="backup.settingValue"
-            placeholder="D:\InvDB.bak" />
+            placeholder="D:\InvDB.sql" />
           <p class="text-muted small mb-2">
-            Manual backup only. Clicking Backup now overwrites this file.
-            SQL Server service must be able to write to this path.
+            Exports the complete schema and data as a portable SQL script for SQL Server 2012 or later.
+            Existing files at this path are overwritten. Run it when users are not entering transactions.
           </p>
           <div class="settings-card__actions">
             <button class="btn btn-outline-secondary btn-sm" type="button" (click)="saveBackupPath()" [disabled]="saving">
@@ -192,7 +192,7 @@
               type="button"
               (click)="createDatabaseBackup()"
               [disabled]="backingUpDatabase">
-              {{ backingUpDatabase ? 'Backing up...' : 'Backup now' }}
+              {{ backingUpDatabase ? 'Exporting...' : 'Export SQL backup' }}
             </button>
           </div>
         </div>
