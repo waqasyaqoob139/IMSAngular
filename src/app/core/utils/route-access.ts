@@ -16,6 +16,7 @@ const PERMISSION_HOME_ROUTES: { permission: string; route: string }[] = [
   { permission: PERMISSIONS.setupSuppliers, route: '/masters/suppliers' },
   { permission: PERMISSIONS.setupLocations, route: '/masters/locations' },
   { permission: PERMISSIONS.setupExpenseCategories, route: '/masters/expense-categories' },
+  { permission: PERMISSIONS.setupCashOpening, route: '/masters/cash-bank-opening' },
   { permission: PERMISSIONS.masters, route: '/masters/products' },
   { permission: PERMISSIONS.usersAdmin, route: '/users' },
   { permission: PERMISSIONS.inventoryLedger, route: '/inventory/ledger' },

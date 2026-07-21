@@ -29,7 +29,10 @@
         <span>Stock</span>
         <span>{{ priceLabel }}</span>
       </div>
-      <div *ngIf="filteredProducts.length === 0" class="product-browse__empty">
+      <div *ngIf="loading" class="product-browse__empty">
+        Searching…
+      </div>
+      <div *ngIf="!loading && filteredProducts.length === 0" class="product-browse__empty">
         No products match your search.
       </div>
       <button

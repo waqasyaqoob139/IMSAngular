@@ -29,9 +29,10 @@
             <li *ngIf="canSetupPage(p.setupCustomers) || canSetupPage(p.setupSuppliers)"><hr class="dropdown-divider" /></li>
             <li *ngIf="canSetupPage(p.setupCustomers)"><a class="dropdown-item" routerLink="/masters/customers">Customers</a></li>
             <li *ngIf="canSetupPage(p.setupSuppliers)"><a class="dropdown-item" routerLink="/masters/suppliers">Suppliers</a></li>
-            <li *ngIf="canSetupPage(p.setupLocations) || canSetupPage(p.setupExpenseCategories)"><hr class="dropdown-divider" /></li>
+            <li *ngIf="canSetupPage(p.setupLocations) || canSetupPage(p.setupExpenseCategories) || canSetupPage(p.setupCashOpening)"><hr class="dropdown-divider" /></li>
             <li *ngIf="canSetupPage(p.setupLocations)"><a class="dropdown-item" routerLink="/masters/locations">Store Locations</a></li>
             <li *ngIf="canSetupPage(p.setupExpenseCategories)"><a class="dropdown-item" routerLink="/masters/expense-categories">Expense Categories</a></li>
+            <li *ngIf="canSetupPage(p.setupCashOpening)"><a class="dropdown-item" routerLink="/masters/cash-bank-opening">Cash / Bank Opening</a></li>
           </ul>
         </li>
 

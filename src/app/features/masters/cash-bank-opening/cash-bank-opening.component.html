@@ -1,0 +1,62 @@
+<div class="page-shell">
+  <div *ngIf="message" class="alert alert-success">{{ message }}</div>
+  <div *ngIf="errorMessage" class="alert alert-danger">{{ errorMessage }}</div>
+
+  <div class="page-header">
+    <div>
+      <h4>Cash / Bank Opening</h4>
+      <p class="text-muted mb-0 small">
+        Set the cash or bank amount you already have when starting the system.
+        This updates dashboard cash and the cash book opening line.
+      </p>
+    </div>
+    <button class="btn btn-outline-secondary" type="button" (click)="load()" [disabled]="loading">Refresh</button>
+  </div>
+
+  <div class="content-panel">
+    <div *ngIf="loading" class="loading-row">Loading...</div>
+    <div class="data-table-wrap" *ngIf="!loading">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Account</th>
+            <th>Type</th>
+            <th class="text-end">Opening Balance</th>
+            <th class="text-end">Current Balance</th>
+            <th class="col-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngIf="accounts.length === 0" class="empty-row">
+            <td colspan="5">No cash or bank accounts found.</td>
+          </tr>
+          <tr *ngFor="let a of accounts">
+            <td>
+              <strong>{{ a.accountName }}</strong>
+              <div class="text-muted small">{{ a.accountCode }}</div>
+            </td>
+            <td>{{ accountType(a) }}</td>
+            <td class="text-end" style="min-width: 9rem;">
+              <input
+                type="number"
+                class="form-control form-control-sm text-end"
+                min="0"
+                step="0.01"
+                [(ngModel)]="drafts[a.accountId]" />
+            </td>
+            <td class="text-end fw-semibold">{{ a.currentBalance | number:'1.2-2' }}</td>
+            <td class="col-actions">
+              <button
+                type="button"
+                class="btn btn-sm btn-success"
+                (click)="save(a)"
+                [disabled]="savingId === a.accountId || !isDirty(a)">
+                {{ savingId === a.accountId ? 'Saving...' : 'Save' }}
+              </button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>

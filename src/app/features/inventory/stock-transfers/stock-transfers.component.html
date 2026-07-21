@@ -77,7 +77,11 @@
               <tr *ngFor="let line of lines.controls; let i = index" [formGroupName]="i">
                 <td>
                   <app-searchable-select formControlName="productId" [small]="true" [wide]="true"
-                    [items]="productSelectOptions" placeholder="Select..." />
+                    [items]="productSelectOptions" [serverFilter]="true"
+                    placeholder="Type to find product..."
+                    (searchChange)="onProductSearch($event)"
+                    (openChange)="onProductPickerOpen($event)" />
+                  <small class="text-muted" *ngIf="loadingProducts">Loading…</small>
                 </td>
                 <td><input type="number" class="form-control form-control-sm" formControlName="quantity" step="0.01" min="0.01" /></td>
                 <td><button type="button" class="btn btn-sm btn-outline-danger" (click)="removeLine(i)">×</button></td>

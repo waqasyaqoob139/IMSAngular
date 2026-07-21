@@ -614,14 +614,7 @@ h4 {
   flex-wrap: wrap;
 
   &--print {
-    .btn-success {
-      order: 1;
-    }
-    .btn-outline-success {
-      order: 2;
-    }
     .btn-secondary {
-      order: 0;
       margin-right: auto;
     }
   }

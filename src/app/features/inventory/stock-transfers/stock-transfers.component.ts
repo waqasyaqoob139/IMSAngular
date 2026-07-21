@@ -1,12 +1,12 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnDestroy, OnInit } from '@angular/core';
 import { FormArray, FormBuilder, Validators } from '@angular/forms';
-import { finalize } from 'rxjs';
+import { Subject, debounceTime, distinctUntilChanged, finalize, switchMap, takeUntil } from 'rxjs';
 import { ApiService } from '../../../core/services/api.service';
 import { LookupsService } from '../../../core/services/lookups.service';
 import { getApiErrorMessage, PaginatedList } from '../../../core/models/api.models';
 import { blockSaveIfInvalid } from '../../../core/utils/form-validation';
 import { ListPagination } from '../../../core/utils/list-pagination';
-import { mapNamedOptions, mapProductOptions, SearchableSelectOption } from '../../../shared/components/searchable-select/searchable-select.models';
+import { mapNamedOptions, SearchableSelectOption } from '../../../shared/components/searchable-select/searchable-select.models';
 import { todayIsoDate } from '../../../core/utils/date-format';
 
 interface TransferListItem {
@@ -21,6 +21,8 @@ interface TransferListItem {
 interface ProductOption {
   productId: number;
   productName: string;
+  sku?: string;
+  serialNo?: string;
 }
 
 interface NamedOption {
@@ -33,24 +35,30 @@ interface NamedOption {
   templateUrl: './stock-transfers.component.html',
   standalone: false
 })
-export class StockTransfersComponent implements OnInit {
+export class StockTransfersComponent implements OnInit, OnDestroy {
   items: TransferListItem[] = [];
   pagination = new ListPagination();
   products: ProductOption[] = [];
   locations: NamedOption[] = [];
   loading = false;
   saving = false;
+  loadingProducts = false;
   showForm = false;
   message = '';
   errorMessage = '';
   form;
+  private readonly destroy$ = new Subject<void>();
+  private readonly productSearch$ = new Subject<string>();
 
   get locationSelectOptions(): SearchableSelectOption[] {
     return mapNamedOptions(this.locations);
   }
 
   get productSelectOptions(): SearchableSelectOption[] {
-    return mapProductOptions(this.products);
+    return this.products.map(p => ({
+      value: p.productId,
+      label: [p.productName, p.serialNo ? `#${p.serialNo}` : '', p.sku || ''].filter(Boolean).join(' · ')
+    }));
   }
 
   constructor(
@@ -70,6 +78,12 @@ export class StockTransfersComponent implements OnInit {
   ngOnInit(): void {
     this.load();
     this.loadLookups();
+    this.bindProductSearch();
+  }
+
+  ngOnDestroy(): void {
+    this.destroy$.next();
+    this.destroy$.complete();
   }
 
   get lines(): FormArray {
@@ -126,16 +140,65 @@ export class StockTransfersComponent implements OnInit {
     });
   }
 
-  loadProducts(): void {
-    this.api.get<PaginatedList<ProductOption>>('/products', { pageSize: 500 }).subscribe({
-      next: res => (this.products = res.data?.items ?? [])
-    });
+  loadProducts(search = ''): void {
+    this.loadingProducts = true;
+    const q = search.trim();
+    const params: Record<string, string | number | boolean | undefined> = {
+      pageSize: q ? ListPagination.pickerSearchPageSize : ListPagination.pickerBrowsePageSize,
+      sortBy: 'ProductName'
+    };
+    if (q) {
+      params['search'] = q;
+      params['searchMode'] = 'Both';
+    }
+    this.api
+      .get<PaginatedList<ProductOption>>('/products', params)
+      .pipe(finalize(() => (this.loadingProducts = false)))
+      .subscribe({
+        next: res => (this.products = res.data?.items ?? []),
+        error: () => (this.products = [])
+      });
+  }
+
+  onProductSearch(query: string): void {
+    this.productSearch$.next(query.trim());
+  }
+
+  onProductPickerOpen(open: boolean): void {
+    if (open && !this.products.length && !this.loadingProducts) {
+      this.loadProducts();
+    }
+  }
+
+  private bindProductSearch(): void {
+    this.productSearch$
+      .pipe(
+        debounceTime(250),
+        distinctUntilChanged(),
+        switchMap(q => {
+          this.loadingProducts = true;
+          const params: Record<string, string | number | boolean | undefined> = {
+            pageSize: q ? ListPagination.pickerSearchPageSize : ListPagination.pickerBrowsePageSize,
+            sortBy: 'ProductName'
+          };
+          if (q) {
+            params['search'] = q;
+            params['searchMode'] = 'Both';
+          }
+          return this.api
+            .get<PaginatedList<ProductOption>>('/products', params)
+            .pipe(finalize(() => (this.loadingProducts = false)));
+        }),
+        takeUntil(this.destroy$)
+      )
+      .subscribe({
+        next: res => (this.products = res.data?.items ?? []),
+        error: () => (this.products = [])
+      });
   }
 
   openCreate(): void {
-    if (!this.products.length) {
-      this.loadProducts();
-    }
+    this.products = [];
     this.showForm = true;
     this.message = '';
     this.errorMessage = '';

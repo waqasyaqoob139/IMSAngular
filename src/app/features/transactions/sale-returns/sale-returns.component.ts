@@ -159,7 +159,7 @@ export class SaleReturnsComponent implements OnInit {
   }
 
   loadSales(): void {
-    this.api.get<PaginatedList<SaleOption>>('/sales', { pageSize: 200 }).subscribe({
+    this.api.get<PaginatedList<SaleOption>>('/sales', { pageSize: ListPagination.pickerBrowsePageSize }).subscribe({
       next: res => {
         this.sales = (res.data?.items ?? []).map(s => ({
           saleId: s.saleId,

@@ -9,6 +9,7 @@ import { CustomersComponent } from './customers/customers.component';
 import { SuppliersComponent } from './suppliers/suppliers.component';
 import { LocationsComponent } from './locations/locations.component';
 import { ExpenseCategoriesComponent } from './expense-categories/expense-categories.component';
+import { CashBankOpeningComponent } from './cash-bank-opening/cash-bank-opening.component';
 import { SharedModule } from '../../shared/shared.module';
 
 @NgModule({
@@ -20,7 +21,8 @@ import { SharedModule } from '../../shared/shared.module';
     CustomersComponent,
     SuppliersComponent,
     LocationsComponent,
-    ExpenseCategoriesComponent
+    ExpenseCategoriesComponent,
+    CashBankOpeningComponent
   ],
   imports: [SharedModule],
   exports: [
@@ -31,7 +33,8 @@ import { SharedModule } from '../../shared/shared.module';
     CustomersComponent,
     SuppliersComponent,
     LocationsComponent,
-    ExpenseCategoriesComponent
+    ExpenseCategoriesComponent,
+    CashBankOpeningComponent
   ]
 })
 export class MastersModule {}

@@ -274,7 +274,7 @@ export class CustomerPaymentsComponent implements OnInit, OnDestroy {
           currentBalance: number;
         }>
       >('/customer-payments/parties', {
-        pageSize: 500
+        pageSize: ListPagination.masterLookupPageSize
       })
       .pipe(finalize(() => (this.loadingParties = false)))
       .subscribe({

@@ -1,12 +1,12 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { FormArray, FormBuilder, Validators } from '@angular/forms';
-import { finalize, Subscription } from 'rxjs';
+import { Subject, debounceTime, distinctUntilChanged, finalize, Subscription, switchMap, takeUntil } from 'rxjs';
 import { ApiService } from '../../../core/services/api.service';
 import { LookupsService } from '../../../core/services/lookups.service';
 import { getApiErrorMessage, PaginatedList } from '../../../core/models/api.models';
 import { blockSaveIfInvalid } from '../../../core/utils/form-validation';
 import { ListPagination } from '../../../core/utils/list-pagination';
-import { mapNamedOptions, mapProductOptions, SearchableSelectOption } from '../../../shared/components/searchable-select/searchable-select.models';
+import { mapNamedOptions, SearchableSelectOption } from '../../../shared/components/searchable-select/searchable-select.models';
 import { todayIsoDate } from '../../../core/utils/date-format';
 
 interface AdjustmentListItem {
@@ -28,6 +28,8 @@ interface AdjustmentType {
 interface ProductOption {
   productId: number;
   productName: string;
+  sku?: string;
+  serialNo?: string;
   purchaseCost: number;
   currentStock: number;
 }
@@ -57,19 +59,25 @@ export class StockAdjustmentsComponent implements OnInit, OnDestroy {
   stockByProductAtLocation: Record<number, number> = {};
   loading = false;
   saving = false;
+  loadingProducts = false;
   loadingLocationStock = false;
   showForm = false;
   message = '';
   errorMessage = '';
   form;
   private locationSub?: Subscription;
+  private readonly destroy$ = new Subject<void>();
+  private readonly productSearch$ = new Subject<string>();
 
   get locationSelectOptions(): SearchableSelectOption[] {
     return mapNamedOptions(this.locations);
   }
 
   get productSelectOptions(): SearchableSelectOption[] {
-    return mapProductOptions(this.products);
+    return this.products.map(p => ({
+      value: p.productId,
+      label: this.productLabel(p)
+    }));
   }
 
   get adjustmentTypeOptions(): SearchableSelectOption[] {
@@ -93,6 +101,7 @@ export class StockAdjustmentsComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.load();
     this.loadLookups();
+    this.bindProductSearch();
     this.api.get<AdjustmentType[]>('/inventory/adjustment-types').subscribe({
       next: res => (this.adjustmentTypes = (res.data ?? []).map(t => ({ id: t.id, name: t.name })))
     });
@@ -102,6 +111,8 @@ export class StockAdjustmentsComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.locationSub?.unsubscribe();
+    this.destroy$.next();
+    this.destroy$.complete();
   }
 
   get lines(): FormArray {
@@ -160,15 +171,85 @@ export class StockAdjustmentsComponent implements OnInit, OnDestroy {
     });
   }
 
-  loadProducts(): void {
-    this.api.get<PaginatedList<ProductOption>>('/products', { pageSize: 300 }).subscribe({
-      next: res =>
-        (this.products = (res.data?.items ?? []).map(p => ({
-          ...p,
-          currentStock: Number(p.currentStock ?? 0),
-          purchaseCost: Number(p.purchaseCost ?? 0)
-        })))
-    });
+  /** Always reload so newly added products appear. Type to search beyond the first page. */
+  loadProducts(search = ''): void {
+    this.loadingProducts = true;
+    const q = search.trim();
+    const params: Record<string, string | number | boolean | undefined> = {
+      pageSize: q ? ListPagination.pickerSearchPageSize : ListPagination.pickerBrowsePageSize,
+      sortBy: 'ProductName'
+    };
+    if (q) {
+      params['search'] = q;
+      params['searchMode'] = 'Both';
+    }
+
+    this.api
+      .get<PaginatedList<ProductOption>>('/products', params)
+      .pipe(finalize(() => (this.loadingProducts = false)))
+      .subscribe({
+        next: res => {
+          this.products = (res.data?.items ?? []).map(p => ({
+            ...p,
+            currentStock: Number(p.currentStock ?? 0),
+            purchaseCost: Number(p.purchaseCost ?? 0)
+          }));
+        },
+        error: () => {
+          this.products = [];
+          this.errorMessage = 'Could not load products. Check Products permission or restart API.';
+        }
+      });
+  }
+
+  onProductSearch(query: string): void {
+    this.productSearch$.next(query.trim());
+  }
+
+  onProductPickerOpen(open: boolean): void {
+    if (open && !this.products.length && !this.loadingProducts) {
+      this.loadProducts();
+    }
+  }
+
+  private bindProductSearch(): void {
+    this.productSearch$
+      .pipe(
+        debounceTime(250),
+        distinctUntilChanged(),
+        switchMap(q => {
+          this.loadingProducts = true;
+          const params: Record<string, string | number | boolean | undefined> = {
+            pageSize: q ? ListPagination.pickerSearchPageSize : ListPagination.pickerBrowsePageSize,
+            sortBy: 'ProductName'
+          };
+          if (q) {
+            params['search'] = q;
+            params['searchMode'] = 'Both';
+          }
+          return this.api
+            .get<PaginatedList<ProductOption>>('/products', params)
+            .pipe(finalize(() => (this.loadingProducts = false)));
+        }),
+        takeUntil(this.destroy$)
+      )
+      .subscribe({
+        next: res => {
+          this.products = (res.data?.items ?? []).map(p => ({
+            ...p,
+            currentStock: Number(p.currentStock ?? 0),
+            purchaseCost: Number(p.purchaseCost ?? 0)
+          }));
+        },
+        error: () => (this.products = [])
+      });
+  }
+
+  private productLabel(p: ProductOption): string {
+    const bits = [p.productName];
+    if (p.serialNo) bits.push(`#${p.serialNo}`);
+    if (p.sku) bits.push(p.sku);
+    return bits.join(' · ');
   }
 
   loadLocationStock(): void {
@@ -223,9 +304,7 @@ export class StockAdjustmentsComponent implements OnInit, OnDestroy {
   }
 
   openCreate(): void {
-    if (!this.products.length) {
-      this.loadProducts();
-    }
+    this.products = [];
     this.showForm = true;
     this.message = '';
     this.errorMessage = '';

@@ -71,7 +71,10 @@ export class SalaryPaymentsComponent implements OnInit {
   }
 
   loadEmployees(): void {
-    this.api.get<PaginatedList<EmployeeOption>>('/employees', { activeOnly: true, pageSize: 500 }).subscribe({
+    this.api.get<PaginatedList<EmployeeOption>>('/employees', {
+      activeOnly: true,
+      pageSize: ListPagination.masterLookupPageSize
+    }).subscribe({
       next: res => (this.employees = (res.data?.items ?? []).map(e => ({
         employeeId: e.employeeId,
         fullName: (e as { fullName: string }).fullName,

@@ -25,9 +25,13 @@ export class TxnProductBrowseComponent implements OnChanges, OnDestroy {
   @Input() products: TxnBrowseProduct[] = [];
   @Input() priceLabel = 'Price';
   @Input() searchMode: ProductSearchMode = 'Both';
+  /** When true, parent loads matches from the API — do not re-filter locally. */
+  @Input() serverFilter = false;
+  @Input() loading = false;
 
   @Output() closed = new EventEmitter<void>();
   @Output() selected = new EventEmitter<TxnBrowseProduct>();
+  @Output() searchChange = new EventEmitter<string>();
 
   @ViewChild('browseSearchInput') browseSearchInputRef?: ElementRef<HTMLInputElement>;
   @ViewChild('browseOverlay') browseOverlayRef?: ElementRef<HTMLElement>;
@@ -38,6 +42,7 @@ export class TxnProductBrowseComponent implements OnChanges, OnDestroy {
   constructor(private readonly hostRef: ElementRef<HTMLElement>) {}
 
   get filteredProducts(): TxnBrowseProduct[] {
+    if (this.serverFilter) return this.products;
     return filterProductsBySearchMode(this.products, this.filter, this.searchMode);
   }
 
@@ -109,6 +114,7 @@ export class TxnProductBrowseComponent implements OnChanges, OnDestroy {
 
   onFilterInput(): void {
     this.highlightedIndex = this.filteredProducts.length > 0 ? 0 : -1;
+    this.searchChange.emit(this.filter.trim());
   }
 
   onKeydown(event: KeyboardEvent): void {

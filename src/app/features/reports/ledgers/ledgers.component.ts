@@ -3,6 +3,7 @@ import { finalize } from 'rxjs';
 import { ApiService } from '../../../core/services/api.service';
 import { LookupsService } from '../../../core/services/lookups.service';
 import { PaginatedList } from '../../../core/models/api.models';
+import { ListPagination } from '../../../core/utils/list-pagination';
 import { mapNamedOptions, SearchableSelectOption } from '../../../shared/components/searchable-select/searchable-select.models';
 
 interface PartyOption {
@@ -69,7 +70,7 @@ export class LedgersComponent implements OnInit {
 
   private ensureProductsLoaded(): void {
     if (this.products.length) return;
-    this.api.get<PaginatedList<{ productId: number; productName: string }>>('/products', { pageSize: 500 }).subscribe({
+    this.api.get<PaginatedList<{ productId: number; productName: string }>>('/products', { pageSize: ListPagination.pickerBrowsePageSize }).subscribe({
       next: res => (this.products = (res.data?.items ?? []).map(p => ({ id: p.productId, name: p.productName })))
     });
   }

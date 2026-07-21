@@ -204,10 +204,14 @@ export class ProductsComponent implements OnInit {
 
     forkJoin({
       categories: this.api.get<PaginatedList<{ categoryId: number; categoryName: string }>>('/categories', {
-        pageSize: 500
+        pageSize: ListPagination.masterLookupPageSize
       }),
-      brands: this.api.get<PaginatedList<{ brandId: number; brandName: string }>>('/brands', { pageSize: 500 }),
-      units: this.api.get<PaginatedList<{ unitId: number; unitName: string }>>('/units', { pageSize: 500 })
+      brands: this.api.get<PaginatedList<{ brandId: number; brandName: string }>>('/brands', {
+        pageSize: ListPagination.masterLookupPageSize
+      }),
+      units: this.api.get<PaginatedList<{ unitId: number; unitName: string }>>('/units', {
+        pageSize: ListPagination.masterLookupPageSize
+      })
     })
       .pipe(finalize(() => (this.loadingLookups = false)))
       .subscribe({

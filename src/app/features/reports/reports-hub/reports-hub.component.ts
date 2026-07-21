@@ -2,7 +2,7 @@ import { Component, OnDestroy, OnInit } from '@angular/core';
 import { Subject, debounceTime, distinctUntilChanged, finalize, switchMap, takeUntil } from 'rxjs';
 import { ApiService } from '../../../core/services/api.service';
 import { PaginatedList } from '../../../core/models/api.models';
-import { QueryParams } from '../../../core/utils/list-pagination';
+import { ListPagination, QueryParams } from '../../../core/utils/list-pagination';
 import { mapNamedOptions, SearchableSelectOption } from '../../../shared/components/searchable-select/searchable-select.models';
 
 interface SalesReportRow {
@@ -351,7 +351,9 @@ export class ReportsHubComponent implements OnInit, OnDestroy {
   }
 
   private loadProducts(search = ''): void {
-    const params: QueryParams = { pageSize: search ? 100 : 300 };
+    const params: QueryParams = {
+      pageSize: search ? ListPagination.pickerSearchPageSize : ListPagination.pickerBrowsePageSize
+    };
     if (search) params['search'] = search;
 
     this.api
@@ -372,7 +374,9 @@ export class ReportsHubComponent implements OnInit, OnDestroy {
         debounceTime(250),
         distinctUntilChanged(),
         switchMap(q => {
-          const params: QueryParams = { pageSize: q ? 100 : 300 };
+          const params: QueryParams = {
+            pageSize: q ? ListPagination.pickerSearchPageSize : ListPagination.pickerBrowsePageSize
+          };
           if (q) params['search'] = q;
           return this.api.get<PaginatedList<{ productId: number; productName: string; sku?: string }>>(
             '/products',

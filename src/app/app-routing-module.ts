@@ -12,6 +12,7 @@ import { CustomersComponent } from './features/masters/customers/customers.compo
 import { SuppliersComponent } from './features/masters/suppliers/suppliers.component';
 import { LocationsComponent } from './features/masters/locations/locations.component';
 import { ExpenseCategoriesComponent } from './features/masters/expense-categories/expense-categories.component';
+import { CashBankOpeningComponent } from './features/masters/cash-bank-opening/cash-bank-opening.component';
 import { PurchasesComponent } from './features/transactions/purchases/purchases.component';
 import { SalesComponent } from './features/transactions/sales/sales.component';
 import { CustomerPaymentsComponent } from './features/transactions/customer-payments/customer-payments.component';
@@ -53,6 +54,7 @@ const routes: Routes = [
       { path: 'masters/suppliers', component: SuppliersComponent, canActivate: [permissionGuard], data: { permission: groupedPagePermissionOrFull(PERMISSIONS.setupSuppliers) } },
       { path: 'masters/locations', component: LocationsComponent, canActivate: [permissionGuard], data: { permission: groupedPagePermissionOrFull(PERMISSIONS.setupLocations) } },
       { path: 'masters/expense-categories', component: ExpenseCategoriesComponent, canActivate: [permissionGuard], data: { permission: groupedPagePermissionOrFull(PERMISSIONS.setupExpenseCategories) } },
+      { path: 'masters/cash-bank-opening', component: CashBankOpeningComponent, canActivate: [permissionGuard], data: { permission: groupedPagePermissionOrFull(PERMISSIONS.setupCashOpening) } },
       { path: 'transactions/purchases', component: PurchasesComponent, canActivate: [permissionGuard], data: { permission: PERMISSIONS.purchases } },
       { path: 'transactions/sales', component: SalesComponent, canActivate: [permissionGuard], data: { permission: PERMISSIONS.sales } },
       { path: 'transactions/customer-payments', component: CustomerPaymentsComponent, canActivate: [permissionGuard], data: { permission: PERMISSIONS.payments } },

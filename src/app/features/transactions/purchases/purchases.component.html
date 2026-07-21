@@ -195,9 +195,12 @@
                 [open]="productBrowseOpen"
                 [products]="browseProducts"
                 [searchMode]="productSearchMode"
+                [serverFilter]="true"
+                [loading]="productsLoading"
                 priceLabel="Cost"
                 (closed)="closeProductBrowse()"
-                (selected)="onBrowseProductSelected($event)">
+                (selected)="onBrowseProductSelected($event)"
+                (searchChange)="onBrowseProductSearch($event)">
               </app-txn-product-browse>
 
               <div class="lines-meta" *ngIf="filledLineIndices.length">
@@ -254,8 +257,13 @@
                               </button>
                             </div>
                             <div
+                              class="product-picker__hint product-picker__hint--loading"
+                              *ngIf="productsLoading && productSearch.trim()">
+                              Searching…
+                            </div>
+                            <div
                               class="product-picker__hint"
-                              *ngIf="productSearch.trim() && !pickerProducts.length && !creatingProduct">
+                              *ngIf="productSearch.trim() && !pickerProducts.length && !creatingProduct && !productsLoading">
                               Press Enter to add "<strong>{{ productSearch.trim() }}</strong>" as a new product
                             </div>
                             <div class="product-picker__hint product-picker__hint--loading" *ngIf="creatingProduct">

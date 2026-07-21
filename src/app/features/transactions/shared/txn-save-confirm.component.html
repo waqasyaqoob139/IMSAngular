@@ -28,21 +28,27 @@
     </div>
 
     <div class="txn-save-confirm__actions" [class.txn-save-confirm__actions--print]="printChoice">
-      <button type="button" class="btn btn-secondary" (click)="cancelled.emit()" [disabled]="saving">
+      <button
+        #cancelBtn
+        type="button"
+        class="btn btn-secondary"
+        (click)="cancelled.emit()"
+        [disabled]="saving">
         Cancel
       </button>
       <ng-container *ngIf="printChoice; else simpleSave">
         <button
+          #saveBtn
           type="button"
-          class="btn btn-outline-success"
+          class="btn btn-success"
           (click)="emitConfirm(false)"
           [disabled]="saving">
           {{ saving ? 'Saving...' : saveLabel }}
         </button>
         <button
-          #confirmBtn
+          #savePrintBtn
           type="button"
-          class="btn btn-success"
+          class="btn btn-outline-success"
           (click)="emitConfirm(true)"
           [disabled]="saving">
           {{ saving ? 'Saving...' : saveWithPrintLabel }}
@@ -50,7 +56,7 @@
       </ng-container>
       <ng-template #simpleSave>
         <button
-          #confirmBtn
+          #saveBtn
           type="button"
           class="btn btn-success"
           (click)="emitConfirm(false)"

@@ -154,7 +154,7 @@ export class PurchaseReturnsComponent implements OnInit {
   }
 
   loadPurchases(): void {
-    this.api.get<PaginatedList<PurchaseOption>>('/purchases', { pageSize: 200 }).subscribe({
+    this.api.get<PaginatedList<PurchaseOption>>('/purchases', { pageSize: ListPagination.pickerBrowsePageSize }).subscribe({
       next: res => {
         this.purchases = (res.data?.items ?? []).map(p => ({
           purchaseId: p.purchaseId,

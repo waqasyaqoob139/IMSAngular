@@ -42,6 +42,11 @@ export class SearchableSelectComponent implements ControlValueAccessor, OnDestro
   @Input({ transform: booleanAttribute }) wide = false;
   @Input() pendingText: string | null = null;
   @Input() txnFocus?: string;
+  /**
+   * When true, do not filter items locally — parent handles search (e.g. API product search).
+   * Without this, typing only searches the already-loaded page of items.
+   */
+  @Input({ transform: booleanAttribute }) serverFilter = false;
 
   @Output() selectionChange = new EventEmitter<unknown>();
   @Output() pendingTextChange = new EventEmitter<string | null>();
@@ -120,6 +125,9 @@ export class SearchableSelectComponent implements ControlValueAccessor, OnDestro
   }
 
   get filteredItems(): SearchableSelectOption[] {
+    if (this.serverFilter) {
+      return this.items;
+    }
     const q = this.search.trim().toLowerCase();
     return q ? this.items.filter(i => i.label.toLowerCase().includes(q)) : this.items;
   }

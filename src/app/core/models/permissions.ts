@@ -9,6 +9,7 @@ export const PERMISSIONS = {
   setupSuppliers: 'setup_suppliers',
   setupLocations: 'setup_locations',
   setupExpenseCategories: 'setup_expense_categories',
+  setupCashOpening: 'setup_cash_opening',
   sales: 'sales',
   purchases: 'purchases',
   payments: 'payments',
@@ -46,7 +47,8 @@ export const SETUP_PAGE_CODES: PermissionCode[] = [
   PERMISSIONS.setupCustomers,
   PERMISSIONS.setupSuppliers,
   PERMISSIONS.setupLocations,
-  PERMISSIONS.setupExpenseCategories
+  PERMISSIONS.setupExpenseCategories,
+  PERMISSIONS.setupCashOpening
 ];
 
 export const HR_PAGE_CODES: PermissionCode[] = [

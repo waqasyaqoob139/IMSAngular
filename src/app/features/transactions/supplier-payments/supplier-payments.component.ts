@@ -359,7 +359,7 @@ export class SupplierPaymentsComponent implements OnInit, OnDestroy {
           currentBalance: number;
         }>
       >('/supplier-payments/parties', {
-        pageSize: 500
+        pageSize: ListPagination.masterLookupPageSize
       })
       .pipe(finalize(() => (this.loadingParties = false)))
       .subscribe({

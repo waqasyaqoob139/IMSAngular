@@ -8,7 +8,7 @@
   <div class="content-panel">
     <div class="toolbar">
       <app-searchable-select [(ngModel)]="productId" [items]="productSelectOptions" [wide]="true"
-        [nullable]="true" nullLabel="All products"
+        [nullable]="true" nullLabel="All products" [serverFilter]="true"
         (searchChange)="onProductSearch($event)" />
       <app-searchable-select [(ngModel)]="locationId" [items]="locationSelectOptions"
         [nullable]="true" nullLabel="All locations" />

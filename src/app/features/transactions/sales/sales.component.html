@@ -216,9 +216,12 @@
                 [open]="productBrowseOpen"
                 [products]="browseProducts"
                 [searchMode]="productSearchMode"
+                [serverFilter]="true"
+                [loading]="productsLoading"
                 priceLabel="Price"
                 (closed)="closeProductBrowse()"
-                (selected)="onBrowseProductSelected($event)">
+                (selected)="onBrowseProductSelected($event)"
+                (searchChange)="onBrowseProductSearch($event)">
               </app-txn-product-browse>
 
               <div class="lines-meta" *ngIf="filledLineIndices.length">

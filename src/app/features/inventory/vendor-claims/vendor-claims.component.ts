@@ -73,6 +73,7 @@ export class VendorClaimsComponent implements OnInit {
   locations: NamedOption[] = [];
   loading = false;
   saving = false;
+  loadingProducts = false;
   showForm = false;
   viewId: number | null = null;
   viewDetail: ClaimDetail | null = null;
@@ -188,10 +189,34 @@ export class VendorClaimsComponent implements OnInit {
     });
   }
 
-  loadProducts(): void {
-    this.api.get<PaginatedList<ProductOption>>('/products', { pageSize: 500 }).subscribe({
-      next: res => (this.products = res.data?.items ?? [])
-    });
+  loadProducts(search = ''): void {
+    this.loadingProducts = true;
+    const q = search.trim();
+    const params: Record<string, string | number | boolean | undefined> = {
+      pageSize: q ? ListPagination.pickerSearchPageSize : ListPagination.pickerBrowsePageSize,
+      sortBy: 'ProductName'
+    };
+    if (q) {
+      params['search'] = q;
+      params['searchMode'] = 'Both';
+    }
+    this.api
+      .get<PaginatedList<ProductOption>>('/products', params)
+      .pipe(finalize(() => (this.loadingProducts = false)))
+      .subscribe({
+        next: res => (this.products = res.data?.items ?? []),
+        error: () => (this.products = [])
+      });
+  }
+
+  onProductSearch(query: string): void {
+    this.loadProducts(query);
+  }
+
+  onProductPickerOpen(open: boolean): void {
+    if (open && !this.products.length && !this.loadingProducts) {
+      this.loadProducts();
+    }
   }
 
   onProductChange(i: number): void {
@@ -202,9 +227,7 @@ export class VendorClaimsComponent implements OnInit {
   }
 
   openCreate(): void {
-    if (!this.products.length) {
-      this.loadProducts();
-    }
+    this.products = [];
     this.showForm = true;
     this.viewId = null;
     this.viewDetail = null;

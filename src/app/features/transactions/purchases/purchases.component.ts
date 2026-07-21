@@ -1,7 +1,7 @@
 import { Component, ElementRef, HostListener, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import { FormArray, FormBuilder, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
-import { finalize, switchMap, of, map } from 'rxjs';
+import { finalize, switchMap, of, map, Subject, debounceTime, distinctUntilChanged, takeUntil } from 'rxjs';
 import { ApiService } from '../../../core/services/api.service';
 import {
   PurchaseHoldFormValue,
@@ -29,7 +29,6 @@ import { todayIsoDate } from '../../../core/utils/date-format';
 import { ListPagination } from '../../../core/utils/list-pagination';
 import { resolveTxnPaymentStatus, txnPaymentStatusLabel } from '../../../core/utils/txn-payment-status';
 import {
-  filterProductsBySearchMode,
   parseProductSearchMode,
   productSearchPlaceholder,
   ProductSearchMode,
@@ -73,6 +72,7 @@ type PaymentMode = TxnPaymentMode;
 export class PurchasesComponent implements OnInit, OnDestroy {
   purchases: PurchaseListItem[] = [];
   products: ProductOption[] = [];
+  private readonly productCache = new Map<number, ProductOption>();
   suppliers: NamedOption[] = [];
   locations: NamedOption[] = [];
   paymentMethods: NamedOption[] = [];
@@ -100,6 +100,8 @@ export class PurchasesComponent implements OnInit, OnDestroy {
   taxManuallyEdited = false;
   enableProductShortKeys = false;
   productSearchMode: ProductSearchMode = 'Both';
+  productsLoading = false;
+  resolvingProductSearch = false;
 
   search = '';
   pagination = new ListPagination();
@@ -112,6 +114,8 @@ export class PurchasesComponent implements OnInit, OnDestroy {
   @ViewChild('lineProductSearchInput') lineProductSearchInputRef?: ElementRef<HTMLInputElement>;
 
   readonly paymentModes: readonly PaymentMode[] = ['credit', 'cash', 'partial'];
+  private readonly destroy$ = new Subject<void>();
+  private readonly productQuery$ = new Subject<string>();
 
   constructor(
     private api: ApiService,
@@ -142,11 +146,14 @@ export class PurchasesComponent implements OnInit, OnDestroy {
     this.loadLookups();
     this.loadAppSettings();
     this.loadCompanyProfile();
+    this.bindProductTypeahead();
     this.route.queryParams.subscribe(() => this.resolveViewFromRoute());
   }
 
   ngOnDestroy(): void {
     this.persistActiveDraft();
+    this.destroy$.next();
+    this.destroy$.complete();
   }
 
   @HostListener('window:scroll')
@@ -300,7 +307,8 @@ export class PurchasesComponent implements OnInit, OnDestroy {
   }
 
   get filteredProducts(): ProductOption[] {
-    return filterProductsBySearchMode(this.products, this.productSearch, this.productSearchMode);
+    // API typeahead already applies ProductSearchMode — re-filtering hides valid matches.
+    return this.products;
   }
 
   get productSearchPlaceholderText(): string {
@@ -427,6 +435,7 @@ export class PurchasesComponent implements OnInit, OnDestroy {
 
   onProductSearchInput(): void {
     this.productPickerOpen = true;
+    this.productQuery$.next(this.productSearch.trim());
     this.highlightedProductIndex = this.pickerProducts.length > 0 ? 0 : -1;
     this.scheduleLineProductPickerPosition();
   }
@@ -527,6 +536,7 @@ export class PurchasesComponent implements OnInit, OnDestroy {
 
   private openProductPicker(): void {
     this.productPickerOpen = true;
+    this.productQuery$.next(this.productSearch.trim());
     this.highlightedProductIndex = this.filteredProducts.length > 0 ? 0 : -1;
     this.scheduleLineProductPickerPosition();
   }
@@ -557,7 +567,42 @@ export class PurchasesComponent implements OnInit, OnDestroy {
       return;
     }
 
-    this.quickCreateProductAndAdd();
+    this.resolveProductSearchAndAdd();
+  }
+
+  private resolveProductSearchAndAdd(): void {
+    const q = this.productSearch.trim();
+    if (!q || this.resolvingProductSearch) return;
+
+    this.resolvingProductSearch = true;
+    this.errorMessage = '';
+    this.api
+      .get<PaginatedList<Record<string, unknown>>>('/products', {
+        search: q,
+        pageSize: ListPagination.pickerSearchPageSize,
+        searchMode: this.productSearchMode
+      })
+      .pipe(finalize(() => (this.resolvingProductSearch = false)))
+      .subscribe({
+        next: res => {
+          const items = (res.data?.items ?? [])
+            .map(item => this.mapProduct(item))
+            .filter((p): p is ProductOption => p !== null);
+          for (const p of items) this.rememberProduct(p);
+          this.products = [
+            ...items,
+            ...this.products.filter(p => !items.some(x => x.productId === p.productId))
+          ];
+          this.highlightedProductIndex = items.length > 0 ? 0 : -1;
+          const match = this.findLocalProduct(q) ?? items[0];
+          if (match) {
+            this.addProductFromPicker(match);
+            return;
+          }
+          this.quickCreateProductAndAdd();
+        },
+        error: () => this.quickCreateProductAndAdd()
+      });
   }
 
   private quickCreateProductAndAdd(): void {
@@ -609,10 +654,12 @@ export class PurchasesComponent implements OnInit, OnDestroy {
   onLineProductSearchFocus(): void {
     const idx = this.trailingLineIndex;
     if (idx >= 0) this.activeLineIndex = idx;
+    this.productQuery$.next(this.productSearch.trim());
     this.scheduleLineProductPickerPosition();
   }
 
   addProductFromPicker(product: ProductOption): void {
+    this.rememberProduct(product);
     const existingIdx = this.lines.controls.findIndex(
       (c, i) => !this.isTrailingEmptyRow(i) && Number(c.get('productId')?.value) === product.productId
     );
@@ -764,10 +811,15 @@ export class PurchasesComponent implements OnInit, OnDestroy {
   openProductBrowse(): void {
     this.dismissProductPicker();
     this.productBrowseOpen = true;
+    this.productQuery$.next('');
   }
 
   closeProductBrowse(): void {
     this.productBrowseOpen = false;
+  }
+
+  onBrowseProductSearch(query: string): void {
+    this.productQuery$.next(query.trim());
   }
 
   onBrowseProductSelected(row: TxnBrowseProduct): void {
@@ -783,13 +835,14 @@ export class PurchasesComponent implements OnInit, OnDestroy {
 
   productLabel(productId: number | null): string {
     if (!productId) return '—';
-    const p = this.products.find(x => x.productId === productId);
+    const p = this.productCache.get(productId) ?? this.products.find(x => x.productId === productId);
     return p?.productName ?? '—';
   }
 
   productSku(productId: number | null): string {
     if (!productId) return '';
-    return this.products.find(x => x.productId === productId)?.sku ?? '';
+    const p = this.productCache.get(productId) ?? this.products.find(x => x.productId === productId);
+    return p?.sku ?? '';
   }
 
   private ensureTrailingEmptyLine(): void {
@@ -893,9 +946,62 @@ export class PurchasesComponent implements OnInit, OnDestroy {
   }
 
   loadProducts(): void {
-    this.api.get<PaginatedList<ProductOption>>('/products', { pageSize: 200 }).subscribe({
-      next: res => (this.products = res.data?.items ?? [])
-    });
+    this.productQuery$.next(this.productSearch.trim());
+  }
+
+  private bindProductTypeahead(): void {
+    this.productQuery$
+      .pipe(
+        debounceTime(200),
+        distinctUntilChanged(),
+        switchMap(q => {
+          this.productsLoading = true;
+          return this.api
+            .get<PaginatedList<Record<string, unknown>>>('/products', {
+              ...(q ? { search: q, searchMode: this.productSearchMode } : {}),
+              pageSize: q
+                ? ListPagination.pickerSearchPageSize
+                : ListPagination.pickerBrowsePageSize
+            })
+            .pipe(finalize(() => (this.productsLoading = false)));
+        }),
+        takeUntil(this.destroy$)
+      )
+      .subscribe({
+        next: res => {
+          const found = (res.data?.items ?? [])
+            .map(item => this.mapProduct(item))
+            .filter((p): p is ProductOption => p !== null);
+          this.setProducts(found);
+          this.highlightedProductIndex = this.pickerProducts.length > 0 ? 0 : -1;
+          this.scheduleLineProductPickerPosition();
+        },
+        error: () => this.setProducts([])
+      });
+  }
+
+  private setProducts(items: ProductOption[]): void {
+    this.products = items;
+    for (const p of items) this.productCache.set(p.productId, p);
+  }
+
+  private mapProduct(raw: Record<string, unknown>): ProductOption | null {
+    const productId = Number(raw['productId'] ?? raw['ProductId'] ?? 0);
+    const productName = String(raw['productName'] ?? raw['ProductName'] ?? '').trim();
+    if (!productId || !productName) return null;
+    return {
+      productId,
+      productName,
+      sku: String(raw['sku'] ?? raw['Sku'] ?? '').trim(),
+      purchaseCost: Number(raw['purchaseCost'] ?? raw['PurchaseCost'] ?? 0),
+      currentStock: Number(raw['currentStock'] ?? raw['CurrentStock'] ?? 0),
+      shortKey: (raw['shortKey'] ?? raw['ShortKey'] ?? null) as string | null,
+      serialNo: (raw['serialNo'] ?? raw['SerialNo'] ?? null) as string | null
+    };
+  }
+
+  private rememberProduct(product: ProductOption): void {
+    this.productCache.set(product.productId, product);
   }
 
   loadLookups(): void {
@@ -927,7 +1033,9 @@ export class PurchasesComponent implements OnInit, OnDestroy {
 
   private loadSuppliersFallback(): void {
     this.api
-      .get<PaginatedList<{ supplierId: number; supplierName: string }>>('/suppliers', { pageSize: 500 })
+      .get<PaginatedList<{ supplierId: number; supplierName: string }>>('/suppliers', {
+        pageSize: ListPagination.masterLookupPageSize
+      })
       .subscribe({
         next: res => {
           this.suppliers = (res.data?.items ?? []).map(s => ({ id: s.supplierId, name: s.supplierName }));
@@ -960,9 +1068,6 @@ export class PurchasesComponent implements OnInit, OnDestroy {
   }
 
   private openCreateForm(): void {
-    if (!this.products.length) {
-      this.loadProducts();
-    }
     const draft = this.txnHold.getActiveDraft<PurchaseHoldFormValue>('purchase');
     if (draft) {
       this.applyDraft(draft);

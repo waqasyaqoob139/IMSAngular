@@ -30,7 +30,6 @@ import { formatAppDate, todayIsoDate } from '../../../core/utils/date-format';
 import { ListPagination } from '../../../core/utils/list-pagination';
 import { resolveTxnPaymentStatus, txnPaymentStatusLabel } from '../../../core/utils/txn-payment-status';
 import {
-  filterProductsBySearchMode,
   parseProductSearchMode,
   productSearchPlaceholder,
   ProductSearchMode,
@@ -84,6 +83,8 @@ type PaymentMode = TxnPaymentMode;
 export class SalesComponent implements OnInit, OnDestroy {
   sales: SaleListItem[] = [];
   products: ProductOption[] = [];
+  /** Survives typeahead list swaps — stock / labels for lines already on the sale. */
+  private readonly productCache = new Map<number, ProductOption>();
   customers: NamedOption[] = [];
   locations: NamedOption[] = [];
   paymentMethods: PaymentMethodOption[] = [];
@@ -123,7 +124,7 @@ export class SalesComponent implements OnInit, OnDestroy {
   productPickerOpen = false;
   highlightedProductIndex = -1;
   productBrowseOpen = false;
-  private productsLoading = false;
+  productsLoading = false;
   private readonly destroy$ = new Subject<void>();
   private readonly productQuery$ = new Subject<string>();
   resolvingProductSearch = false;
@@ -328,7 +329,8 @@ export class SalesComponent implements OnInit, OnDestroy {
   }
 
   get filteredProducts(): ProductOption[] {
-    return filterProductsBySearchMode(this.products, this.productSearch, this.productSearchMode);
+    // API typeahead already applies ProductSearchMode — re-filtering hides valid matches.
+    return this.products;
   }
 
   get productSearchPlaceholderText(): string {
@@ -678,6 +680,7 @@ export class SalesComponent implements OnInit, OnDestroy {
       return;
     }
 
+    this.rememberProduct(product);
     this.errorMessage = '';
     const existingIdx = this.lines.controls.findIndex(
       (c, i) => !this.isTrailingEmptyRow(i) && Number(c.get('productId')?.value) === productId
@@ -721,7 +724,7 @@ export class SalesComponent implements OnInit, OnDestroy {
     this.api
       .get<PaginatedList<Record<string, unknown>>>('/products', {
         search: q,
-        pageSize: 25,
+        pageSize: ListPagination.pickerSearchPageSize,
         searchMode: this.productSearchMode
       })
       .pipe(finalize(() => (this.resolvingProductSearch = false)))
@@ -730,6 +733,7 @@ export class SalesComponent implements OnInit, OnDestroy {
           const items = (res.data?.items ?? [])
             .map(item => this.mapProduct(item))
             .filter((p): p is ProductOption => p !== null);
+          this.rememberProducts(items);
           for (const p of items) {
             if (!this.products.some(x => x.productId === p.productId)) {
               this.products.push(p);
@@ -916,10 +920,15 @@ export class SalesComponent implements OnInit, OnDestroy {
   openProductBrowse(): void {
     this.dismissProductPicker();
     this.productBrowseOpen = true;
+    this.productQuery$.next('');
   }
 
   closeProductBrowse(): void {
     this.productBrowseOpen = false;
+  }
+
+  onBrowseProductSearch(query: string): void {
+    this.productQuery$.next(query.trim());
   }
 
   onBrowseProductSelected(row: TxnBrowseProduct): void {
@@ -929,19 +938,20 @@ export class SalesComponent implements OnInit, OnDestroy {
   }
 
   onProductShortKey(productId: number): void {
-    const product = this.products.find(p => p.productId === productId);
+    const product = this.productCache.get(productId) ?? this.products.find(p => p.productId === productId);
     if (product) this.addProductFromPicker(product);
   }
 
   productLabel(productId: number | null): string {
     if (!productId) return '—';
-    const p = this.products.find(x => x.productId === productId);
+    const p = this.productCache.get(productId) ?? this.products.find(x => x.productId === productId);
     return p?.productName ?? '—';
   }
 
   productSku(productId: number | null): string {
     if (!productId) return '';
-    return this.products.find(x => x.productId === productId)?.sku ?? '';
+    const p = this.productCache.get(productId) ?? this.products.find(x => x.productId === productId);
+    return p?.sku ?? '';
   }
 
   private ensureTrailingEmptyLine(): void {
@@ -1011,7 +1021,21 @@ export class SalesComponent implements OnInit, OnDestroy {
 
   productStock(productId: number | null): number {
     if (!productId) return 0;
-    return this.products.find(p => p.productId === productId)?.currentStock ?? 0;
+    const p = this.productCache.get(productId) ?? this.products.find(x => x.productId === productId);
+    return p?.currentStock ?? 0;
+  }
+
+  private rememberProduct(product: ProductOption): void {
+    this.productCache.set(product.productId, product);
+  }
+
+  private rememberProducts(items: ProductOption[]): void {
+    for (const p of items) this.rememberProduct(p);
+  }
+
+  private setProducts(items: ProductOption[]): void {
+    this.products = items;
+    this.rememberProducts(items);
   }
 
   lineTotal(line: { quantity?: number; unitPrice?: number }): number {
@@ -1269,13 +1293,15 @@ export class SalesComponent implements OnInit, OnDestroy {
     if (!force && (this.products.length > 0 || this.productsLoading)) return;
     this.productsLoading = true;
     this.api
-      .get<PaginatedList<Record<string, unknown>>>('/products', { pageSize: 200 })
+      .get<PaginatedList<Record<string, unknown>>>('/products', { pageSize: ListPagination.pickerBrowsePageSize })
       .pipe(finalize(() => (this.productsLoading = false)))
       .subscribe({
         next: res => {
-          this.products = (res.data?.items ?? [])
-            .map(item => this.mapProduct(item))
-            .filter((p): p is ProductOption => p !== null);
+          this.setProducts(
+            (res.data?.items ?? [])
+              .map(item => this.mapProduct(item))
+              .filter((p): p is ProductOption => p !== null)
+          );
           this.highlightedProductIndex = this.pickerProducts.length > 0 ? 0 : -1;
         }
       });
@@ -1286,21 +1312,27 @@ export class SalesComponent implements OnInit, OnDestroy {
       .pipe(
         debounceTime(200),
         distinctUntilChanged(),
-        switchMap(q =>
-          this.api.get<PaginatedList<Record<string, unknown>>>('/products', {
-            ...(q ? { search: q, searchMode: this.productSearchMode } : {}),
-            pageSize: q ? 50 : 200
-          })
-        ),
+        switchMap(q => {
+          this.productsLoading = true;
+          return this.api
+            .get<PaginatedList<Record<string, unknown>>>('/products', {
+              ...(q ? { search: q, searchMode: this.productSearchMode } : {}),
+              pageSize: q ? ListPagination.pickerSearchPageSize : ListPagination.pickerBrowsePageSize
+            })
+            .pipe(finalize(() => (this.productsLoading = false)));
+        }),
         takeUntil(this.destroy$)
       )
       .subscribe({
         next: res => {
-          this.products = (res.data?.items ?? [])
-            .map(item => this.mapProduct(item))
-            .filter((p): p is ProductOption => p !== null);
+          this.setProducts(
+            (res.data?.items ?? [])
+              .map(item => this.mapProduct(item))
+              .filter((p): p is ProductOption => p !== null)
+          );
           this.highlightedProductIndex = this.pickerProducts.length > 0 ? 0 : -1;
           this.scheduleLineProductPickerPosition();
+          this.refreshStockWarning();
         }
       });
   }
@@ -1330,7 +1362,9 @@ export class SalesComponent implements OnInit, OnDestroy {
 
   private loadCustomersFallback(): void {
     this.api
-      .get<PaginatedList<{ customerId: number; customerName: string }>>('/customers', { pageSize: 500 })
+      .get<PaginatedList<{ customerId: number; customerName: string }>>('/customers', {
+        pageSize: ListPagination.masterLookupPageSize
+      })
       .subscribe({
         next: res => {
           this.customers = (res.data?.items ?? []).map(c => ({ id: c.customerId, name: c.customerName }));
@@ -1720,7 +1754,7 @@ export class SalesComponent implements OnInit, OnDestroy {
 
   /** Update POS product cache after a successful sale (prevents stale Avl / stock checks). */
   private applySoldStock(lines: Array<{ productId: number; quantity: number }>): void {
-    if (!lines.length || !this.products.length) return;
+    if (!lines.length) return;
 
     const sold = new Map<number, number>();
     for (const line of lines) {
@@ -1735,5 +1769,14 @@ export class SalesComponent implements OnInit, OnDestroy {
         currentStock: Math.max(0, Number(p.currentStock || 0) - qty)
       };
     });
+
+    for (const [productId, qty] of sold) {
+      const cached = this.productCache.get(productId);
+      if (!cached) continue;
+      this.productCache.set(productId, {
+        ...cached,
+        currentStock: Math.max(0, Number(cached.currentStock || 0) - qty)
+      });
+    }
   }
 }

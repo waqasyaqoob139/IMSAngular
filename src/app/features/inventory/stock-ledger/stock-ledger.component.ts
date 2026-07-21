@@ -119,7 +119,9 @@ export class StockLedgerComponent implements OnInit, OnDestroy {
   }
 
   private loadProducts(search = ''): void {
-    const params: QueryParams = { pageSize: search ? 100 : 200 };
+    const params: QueryParams = {
+      pageSize: search ? ListPagination.pickerSearchPageSize : ListPagination.pickerBrowsePageSize
+    };
     if (search) params['search'] = search;
 
     this.api
@@ -140,7 +142,9 @@ export class StockLedgerComponent implements OnInit, OnDestroy {
         debounceTime(250),
         distinctUntilChanged(),
         switchMap(q => {
-          const params: QueryParams = { pageSize: q ? 100 : 200 };
+          const params: QueryParams = {
+            pageSize: q ? ListPagination.pickerSearchPageSize : ListPagination.pickerBrowsePageSize
+          };
           if (q) params['search'] = q;
           return this.api.get<PaginatedList<{ productId: number; productName: string; sku?: string }>>(
             '/products',

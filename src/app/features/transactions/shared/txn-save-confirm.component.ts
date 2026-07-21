@@ -32,15 +32,17 @@ export class TxnSaveConfirmComponent implements OnChanges, AfterViewInit {
   @Output() confirmed = new EventEmitter<boolean>();
   @Output() cancelled = new EventEmitter<void>();
 
-  @ViewChild('confirmBtn') confirmBtn?: ElementRef<HTMLButtonElement>;
+  @ViewChild('cancelBtn') cancelBtn?: ElementRef<HTMLButtonElement>;
+  @ViewChild('saveBtn') saveBtn?: ElementRef<HTMLButtonElement>;
+  @ViewChild('savePrintBtn') savePrintBtn?: ElementRef<HTMLButtonElement>;
 
   ngAfterViewInit(): void {
-    this.focusConfirm();
+    this.focusDefault();
   }
 
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['open']?.currentValue === true) {
-      setTimeout(() => this.focusConfirm(), 0);
+      setTimeout(() => this.focusDefault(), 0);
     }
   }
 
@@ -51,11 +53,18 @@ export class TxnSaveConfirmComponent implements OnChanges, AfterViewInit {
       this.cancelled.emit();
       return;
     }
+
+    if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+      event.preventDefault();
+      event.stopPropagation();
+      this.moveFocus(event.key === 'ArrowRight' ? 1 : -1);
+      return;
+    }
+
     if (event.key === 'Enter' && !this.saving) {
       event.preventDefault();
       event.stopPropagation();
-      // Enter defaults to Sale & Print when that option is shown.
-      this.emitConfirm(this.printChoice);
+      this.activateFocused();
     }
   }
 
@@ -64,8 +73,45 @@ export class TxnSaveConfirmComponent implements OnChanges, AfterViewInit {
     this.confirmed.emit(!!printReceipt);
   }
 
-  private focusConfirm(): void {
+  private focusDefault(): void {
     if (!this.open) return;
-    focusTxnElement(this.confirmBtn?.nativeElement);
+    // Sale first (no print) is the default action.
+    focusTxnElement(this.saveBtn?.nativeElement);
+  }
+
+  private actionButtons(): HTMLButtonElement[] {
+    const buttons = [
+      this.cancelBtn?.nativeElement,
+      this.saveBtn?.nativeElement,
+      this.savePrintBtn?.nativeElement
+    ].filter((b): b is HTMLButtonElement => !!b && !b.disabled);
+    return buttons;
+  }
+
+  private moveFocus(delta: number): void {
+    const buttons = this.actionButtons();
+    if (!buttons.length) return;
+
+    const active = document.activeElement as HTMLButtonElement | null;
+    let index = buttons.findIndex(b => b === active);
+    if (index < 0) index = buttons.findIndex(b => b === this.saveBtn?.nativeElement);
+    if (index < 0) index = 0;
+
+    const next = (index + delta + buttons.length) % buttons.length;
+    focusTxnElement(buttons[next]);
+  }
+
+  private activateFocused(): void {
+    const active = document.activeElement as HTMLButtonElement | null;
+    if (active === this.cancelBtn?.nativeElement) {
+      this.cancelled.emit();
+      return;
+    }
+    if (active === this.savePrintBtn?.nativeElement) {
+      this.emitConfirm(true);
+      return;
+    }
+    // Default / Sale button
+    this.emitConfirm(false);
   }
 }

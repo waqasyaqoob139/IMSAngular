@@ -9,6 +9,7 @@ interface CashBankAccount {
   accountName: string;
   isCashAccount: boolean;
   isBankAccount: boolean;
+  openingBalance: number;
   currentBalance: number;
 }
 
