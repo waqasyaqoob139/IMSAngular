@@ -88,6 +88,10 @@ export class PurchasesComponent implements OnInit, OnDestroy {
   activeLineIndex: number | null = null;
   viewId: number | null = null;
   viewDetail: Record<string, unknown> | null = null;
+  documentFile: File | null = null;
+  viewDocumentUrl: string | null = null;
+  viewDocumentIsImage = false;
+  loadingDocument = false;
 
   paymentMode: PaymentMode = 'credit';
   partialPayAmount = 0;
@@ -117,6 +121,14 @@ export class PurchasesComponent implements OnInit, OnDestroy {
   readonly paymentModes: readonly PaymentMode[] = ['credit', 'cash', 'partial'];
   private readonly destroy$ = new Subject<void>();
   private readonly productQuery$ = new Subject<string>();
+  private readonly maxDocumentBytes = 5 * 1024 * 1024;
+  private readonly allowedDocumentTypes = new Set([
+    'image/jpeg',
+    'image/png',
+    'image/webp',
+    'image/gif',
+    'application/pdf'
+  ]);
 
   constructor(
     private api: ApiService,
@@ -129,7 +141,7 @@ export class PurchasesComponent implements OnInit, OnDestroy {
     this.form = this.fb.group({
       supplierId: [null as number | null],
       invoiceDate: [todayIsoDate(), Validators.required],
-      locationId: [null as number | null, Validators.required],
+      locationId: [null as number | null],
       discountAmount: [0, [Validators.min(0)]],
       taxAmount: [0, [Validators.min(0)]],
       additionalCharges: [0, [Validators.min(0)]],
@@ -153,6 +165,7 @@ export class PurchasesComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.persistActiveDraft();
+    this.clearViewDocument();
     this.destroy$.next();
     this.destroy$.complete();
   }
@@ -294,13 +307,74 @@ export class PurchasesComponent implements OnInit, OnDestroy {
     this.showForm = false;
     this.loadingDetail = true;
     this.viewDetail = null;
+    this.clearDocumentSelection();
+    this.clearViewDocument();
     this.api
       .get<Record<string, unknown>>(`/purchases/${purchaseId}`)
       .pipe(finalize(() => (this.loadingDetail = false)))
       .subscribe({
-        next: res => (this.viewDetail = (res.data as Record<string, unknown>) ?? null),
+        next: res => {
+          this.viewDetail = (res.data as Record<string, unknown>) ?? null;
+          if (this.viewDetail?.['hasAttachmentDocument']) {
+            this.loadViewDocument(purchaseId);
+          }
+        },
         error: () => (this.errorMessage = 'Failed to load purchase detail.')
       });
+  }
+
+  private loadViewDocument(purchaseId: number): void {
+    this.loadingDocument = true;
+    this.api
+      .getBlob(`/purchases/${purchaseId}/document`)
+      .pipe(finalize(() => (this.loadingDocument = false)))
+      .subscribe({
+        next: blob => {
+          this.clearViewDocument();
+          this.viewDocumentIsImage = blob.type.startsWith('image/');
+          this.viewDocumentUrl = URL.createObjectURL(blob);
+        },
+        error: () => (this.errorMessage = 'Could not load purchase document.')
+      });
+  }
+
+  onDocumentSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0] ?? null;
+    this.documentFile = null;
+
+    if (!file) return;
+    if (file.size > this.maxDocumentBytes) {
+      this.errorMessage = 'Purchase document must be 5 MB or smaller.';
+      input.value = '';
+      return;
+    }
+
+    const typeOk =
+      this.allowedDocumentTypes.has(file.type) ||
+      /\.(jpe?g|png|webp|gif|pdf)$/i.test(file.name);
+    if (!typeOk) {
+      this.errorMessage = 'Purchase document must be an image (JPG, PNG, WEBP, GIF) or PDF.';
+      input.value = '';
+      return;
+    }
+
+    this.errorMessage = '';
+    this.documentFile = file;
+  }
+
+  clearDocumentSelection(input?: HTMLInputElement): void {
+    this.documentFile = null;
+    if (input) input.value = '';
+  }
+
+  private clearViewDocument(): void {
+    if (this.viewDocumentUrl) {
+      URL.revokeObjectURL(this.viewDocumentUrl);
+      this.viewDocumentUrl = null;
+    }
+    this.viewDocumentIsImage = false;
+    this.loadingDocument = false;
   }
 
   get lines(): FormArray {
@@ -1064,6 +1138,8 @@ export class PurchasesComponent implements OnInit, OnDestroy {
     this.viewId = null;
     this.viewDetail = null;
     this.showForm = false;
+    this.clearDocumentSelection();
+    this.clearViewDocument();
     this.load();
     setTimeout(() => focusTxnSelector('.txn-list-search'), 0);
   }
@@ -1080,6 +1156,8 @@ export class PurchasesComponent implements OnInit, OnDestroy {
   private resetCreateForm(successMessage = ''): void {
     this.viewId = null;
     this.viewDetail = null;
+    this.clearDocumentSelection();
+    this.clearViewDocument();
     this.showForm = true;
     this.showAdvanced = false;
     this.showSaveConfirm = false;
@@ -1254,9 +1332,9 @@ export class PurchasesComponent implements OnInit, OnDestroy {
 
   private validateForSave(): boolean {
     const v = this.form.getRawValue();
-    if ((!v.supplierId && !this.pendingSupplierName?.trim()) || !v.locationId) {
+    if (!v.supplierId && !this.pendingSupplierName?.trim()) {
       this.form.markAllAsTouched();
-      this.errorMessage = 'Please select supplier and store location.';
+      this.errorMessage = 'Please select a supplier.';
       return false;
     }
 
@@ -1334,13 +1412,19 @@ export class PurchasesComponent implements OnInit, OnDestroy {
             payments: this.buildPayments()
           };
 
-          return this.api.post<number>('/purchases', body);
+          const formData = new FormData();
+          formData.append('purchaseJson', JSON.stringify(body));
+          if (this.documentFile) {
+            formData.append('document', this.documentFile, this.documentFile.name);
+          }
+          return this.api.postForm<number>('/purchases', formData);
         }),
         finalize(() => (this.saving = false))
       )
       .subscribe({
         next: () => {
           this.showSaveConfirm = false;
+          this.clearDocumentSelection();
           this.startNewFormAfterSave('Purchase saved successfully.');
         },
         error: err => {

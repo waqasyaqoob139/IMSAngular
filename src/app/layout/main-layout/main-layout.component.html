@@ -1,15 +1,20 @@
 <nav class="navbar navbar-expand-lg app-navbar">
   <div class="container-fluid px-4">
-    <a class="navbar-brand" routerLink="/dashboard" [title]="branding.displayName()">
+    <a class="navbar-brand" routerLink="/dashboard" [title]="branding.displayName()" (click)="closeMobileMenu()">
       <span class="brand-mark">{{ brandInitials }}</span>
       <span class="brand-text">{{ branding.displayName() }}</span>
     </a>
 
-    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav">
-      <span class="navbar-toggler-icon"></span>
+    <button class="navbar-toggler" type="button"
+      (click)="toggleMobileMenu()"
+      [attr.aria-expanded]="mobileMenuOpen"
+      aria-controls="mainNav"
+      aria-label="Toggle navigation">
+      <span class="app-menu-icon" aria-hidden="true"></span>
     </button>
 
-    <div class="collapse navbar-collapse" id="mainNav">
+    <div class="navbar-collapse app-nav-panel" id="mainNav" [class.app-nav-panel--open]="mobileMenuOpen"
+      role="navigation" aria-label="Main navigation">
       <ul
         class="navbar-nav me-auto mb-2 mb-lg-0 app-nav-menu"
         [class.nav-menus-locked]="navMenusLocked"
@@ -20,8 +25,12 @@
         </li>
 
         <li class="nav-item dropdown" *ngIf="hasSetupMenu()">
-          <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">Setup</a>
-          <ul class="dropdown-menu">
+          <button type="button" class="nav-link dropdown-toggle"
+            [class.show]="mobileOpenSection === 'setup'"
+            [attr.aria-expanded]="mobileOpenSection === 'setup'"
+            aria-controls="setupMenu"
+            (click)="toggleMobileSection('setup', $event)">Setup</button>
+          <ul class="dropdown-menu" id="setupMenu" [class.show]="mobileOpenSection === 'setup'">
             <li *ngIf="canSetupPage(p.setupProducts)"><a class="dropdown-item" routerLink="/masters/products">Products</a></li>
             <li *ngIf="canSetupPage(p.setupCategories)"><a class="dropdown-item" routerLink="/masters/categories">Categories</a></li>
             <li *ngIf="canSetupPage(p.setupBrands)"><a class="dropdown-item" routerLink="/masters/brands">Brands</a></li>
@@ -37,8 +46,12 @@
         </li>
 
         <li class="nav-item dropdown" *ngIf="can(p.sales) || can(p.purchases) || can(p.payments) || can(p.expenses) || can(p.returns)">
-          <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">Transactions</a>
-          <ul class="dropdown-menu">
+          <button type="button" class="nav-link dropdown-toggle"
+            [class.show]="mobileOpenSection === 'transactions'"
+            [attr.aria-expanded]="mobileOpenSection === 'transactions'"
+            aria-controls="transactionsMenu"
+            (click)="toggleMobileSection('transactions', $event)">Transactions</button>
+          <ul class="dropdown-menu" id="transactionsMenu" [class.show]="mobileOpenSection === 'transactions'">
             <li *ngIf="can(p.sales)"><a class="dropdown-item" routerLink="/transactions/sales">Sales / POS</a></li>
             <li *ngIf="can(p.returns)"><a class="dropdown-item" routerLink="/transactions/sale-returns">Sales Returns</a></li>
             <li *ngIf="can(p.purchases)"><a class="dropdown-item" routerLink="/transactions/purchases">Purchases</a></li>
@@ -55,8 +68,12 @@
         </li>
 
         <li class="nav-item dropdown" *ngIf="hasHrMenu()">
-          <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">HR &amp; Payroll</a>
-          <ul class="dropdown-menu">
+          <button type="button" class="nav-link dropdown-toggle"
+            [class.show]="mobileOpenSection === 'hr'"
+            [attr.aria-expanded]="mobileOpenSection === 'hr'"
+            aria-controls="hrMenu"
+            (click)="toggleMobileSection('hr', $event)">HR &amp; Payroll</button>
+          <ul class="dropdown-menu" id="hrMenu" [class.show]="mobileOpenSection === 'hr'">
             <li *ngIf="canHrPage(p.hrEmployees)"><a class="dropdown-item" routerLink="/hr/employees">Employees</a></li>
             <li *ngIf="canHrPage(p.hrPayroll)"><a class="dropdown-item" routerLink="/hr/payroll">Payroll Runs</a></li>
             <li *ngIf="canHrPage(p.hrSalaryPayments)"><a class="dropdown-item" routerLink="/hr/salary-payments">Salary Payments</a></li>
@@ -64,8 +81,12 @@
         </li>
 
         <li class="nav-item dropdown" *ngIf="hasInventoryMenu()">
-          <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">Inventory</a>
-          <ul class="dropdown-menu">
+          <button type="button" class="nav-link dropdown-toggle"
+            [class.show]="mobileOpenSection === 'inventory'"
+            [attr.aria-expanded]="mobileOpenSection === 'inventory'"
+            aria-controls="inventoryMenu"
+            (click)="toggleMobileSection('inventory', $event)">Inventory</button>
+          <ul class="dropdown-menu" id="inventoryMenu" [class.show]="mobileOpenSection === 'inventory'">
             <li *ngIf="canInventoryPage(p.inventoryLedger)"><a class="dropdown-item" routerLink="/inventory/ledger">Stock Ledger</a></li>
             <li *ngIf="canInventoryPage(p.inventoryAdjustments)"><a class="dropdown-item" routerLink="/inventory/adjustments">Stock Adjustments</a></li>
             <li *ngIf="canInventoryPage(p.inventoryClaims)"><a class="dropdown-item" routerLink="/inventory/claims">Vendor Claims</a></li>
@@ -74,8 +95,12 @@
         </li>
 
         <li class="nav-item dropdown" *ngIf="hasReportsMenu()">
-          <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">Reports</a>
-          <ul class="dropdown-menu">
+          <button type="button" class="nav-link dropdown-toggle"
+            [class.show]="mobileOpenSection === 'reports'"
+            [attr.aria-expanded]="mobileOpenSection === 'reports'"
+            aria-controls="reportsMenu"
+            (click)="toggleMobileSection('reports', $event)">Reports</button>
+          <ul class="dropdown-menu" id="reportsMenu" [class.show]="mobileOpenSection === 'reports'">
             <li *ngIf="canReportsPage(p.reportsSummary)"><a class="dropdown-item" routerLink="/reports">Sales / Purchase / Stock / Profit</a></li>
             <li *ngIf="canReportsPage(p.reportsLedgers)"><a class="dropdown-item" routerLink="/reports/ledgers">Ledgers</a></li>
             <li *ngIf="canReportsPage(p.reportsCashBank)"><a class="dropdown-item" routerLink="/reports/cash-bank">Cash &amp; Bank</a></li>
@@ -94,6 +119,7 @@
       <div class="navbar-search me-3" (mouseleave)="searchOpen = false">
         <input
           class="form-control form-control-sm global-search-input"
+          aria-label="Search products, customers, suppliers and invoices"
           placeholder="Search products, invoices..."
           [(ngModel)]="searchTerm"
           (keyup.enter)="onSearch()"
@@ -131,6 +157,9 @@
   </div>
 </nav>
 
-<main class="page-content">
+<button type="button" class="app-nav-backdrop" *ngIf="mobileMenuOpen"
+  (click)="closeMobileMenu()" aria-label="Close navigation"></button>
+
+<main class="page-content" [attr.inert]="mobileMenuOpen ? '' : null" [attr.aria-hidden]="mobileMenuOpen">
   <router-outlet></router-outlet>
 </main>

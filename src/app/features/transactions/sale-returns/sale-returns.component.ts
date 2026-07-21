@@ -13,6 +13,7 @@ interface ReturnListItem {
   saleReturnId: number;
   saleReturnNumber: string;
   returnDate: string;
+  saleId: number;
   saleNumber: string;
   customerName: string | null;
   grandTotal: number;
@@ -34,9 +35,42 @@ interface SaleLine {
   unitPrice: number;
 }
 
+interface SaleReturnDetailLine {
+  saleReturnLineId: number;
+  saleLineId: number;
+  productId: number;
+  productName: string;
+  returnQuantity: number;
+  unitPrice: number;
+  unitCost: number;
+  lineTotal: number;
+}
+
+interface SaleReturnDetail {
+  saleReturnId: number;
+  saleReturnNumber: string;
+  saleId: number;
+  saleNumber: string;
+  customerId?: number | null;
+  customerName?: string | null;
+  returnDate: string;
+  locationId: number;
+  locationName: string;
+  reason?: string | null;
+  refundMethodId: number;
+  refundMethodName: string;
+  subTotal: number;
+  taxAmount: number;
+  grandTotal: number;
+  createdOn: string;
+  createdByUsername?: string | null;
+  lines: SaleReturnDetailLine[];
+}
+
 @Component({
   selector: 'app-sale-returns',
   templateUrl: './sale-returns.component.html',
+  styleUrl: './sale-returns.component.scss',
   standalone: false
 })
 export class SaleReturnsComponent implements OnInit {
@@ -47,7 +81,7 @@ export class SaleReturnsComponent implements OnInit {
   loadingDetail = false;
   showForm = false;
   viewId: number | null = null;
-  viewDetail: Record<string, unknown> | null = null;
+  viewDetail: SaleReturnDetail | null = null;
   loadingView = false;
   search = '';
   pagination = new ListPagination();
@@ -93,7 +127,7 @@ export class SaleReturnsComponent implements OnInit {
     this.loadingView = true;
     this.viewDetail = null;
     this.api
-      .get<Record<string, unknown>>(`/sale-returns/${id}`)
+      .get<SaleReturnDetail>(`/sale-returns/${id}`)
       .pipe(finalize(() => (this.loadingView = false)))
       .subscribe({
         next: res => (this.viewDetail = res.data ?? null),

@@ -43,27 +43,13 @@ interface DashboardData {
   recentActivityGroups: RecentActivityGroup[];
 }
 
-interface SetupStep {
-  key: string;
-  title: string;
-  description: string;
-  isComplete: boolean;
-  route: string;
-}
-
-interface SetupStatus {
-  steps: SetupStep[];
-  completedCount: number;
-  totalCount: number;
-  isReadyForTransactions: boolean;
-}
-
 interface MetricTile {
   label: string;
   value: number;
   tone: string;
+  icon: string;
   isCount?: boolean;
-  route?: string;
+  route: string;
   actionLabel?: string;
 }
 
@@ -77,6 +63,15 @@ interface QuickAction {
   primary?: boolean;
 }
 
+interface DashboardInsight {
+  title: string;
+  detail: string;
+  route: string;
+  queryParams?: Record<string, string | number | boolean>;
+  tone: 'danger' | 'warning' | 'collect' | 'pay';
+  icon: string;
+}
+
 @Component({
   selector: 'app-dashboard',
   templateUrl: './dashboard.component.html',
@@ -88,7 +83,6 @@ export class DashboardComponent implements OnInit {
   private static readonly ACTIVITY_PREVIEW_LIMIT = 5;
 
   data: DashboardData | null = null;
-  setup: SetupStatus | null = null;
   loading = true;
   errorMessage = '';
   lowStockAlertEnabled = true;
@@ -122,10 +116,6 @@ export class DashboardComponent implements OnInit {
     });
 
     this.loadDashboard();
-
-    this.api.get<SetupStatus>('/settings/setup').subscribe({
-      next: res => (this.setup = res.data ?? null)
-    });
   }
 
   get isViewingToday(): boolean {
@@ -210,17 +200,46 @@ export class DashboardComponent implements OnInit {
     return this.isViewingToday ? `${prefix} today` : `${prefix} on ${formatAppDate(this.selectedDate)}`;
   }
 
-  get setupProgress(): number {
-    if (!this.setup || this.setup.totalCount === 0) return 0;
-    return Math.round((this.setup.completedCount / this.setup.totalCount) * 100);
-  }
-
   get showLowStockAlert(): boolean {
     return this.lowStockAlertEnabled && !!this.data && this.data.lowStockCount > 0;
   }
 
   get showOutOfStockAlert(): boolean {
     return !!this.data && this.data.outOfStockCount > 0;
+  }
+
+  get availableFunds(): number {
+    if (!this.data) return 0;
+    return this.data.cashInHand + this.data.bankBalance;
+  }
+
+  get smartInsights(): DashboardInsight[] {
+    if (!this.data) return [];
+    const insights: DashboardInsight[] = [];
+
+    if (this.data.outOfStockCount > 0) {
+      insights.push({
+        title: `${this.data.outOfStockCount} product${this.data.outOfStockCount === 1 ? '' : 's'} out of stock`,
+        detail: 'Restock these products to avoid missed sales.',
+        route: '/reports',
+        queryParams: { tab: 'stock', maxStock: 0 },
+        tone: 'danger',
+        icon: '!'
+      });
+    }
+
+    if (this.lowStockAlertEnabled && this.data.lowStockCount > 0) {
+      insights.push({
+        title: `${this.data.lowStockCount} product${this.data.lowStockCount === 1 ? '' : 's'} running low`,
+        detail: 'Review stock levels before they run out.',
+        route: '/reports',
+        queryParams: { tab: 'stock', belowMinimum: true },
+        tone: 'warning',
+        icon: '↓'
+      });
+    }
+
+    return insights;
   }
 
   formatMoney(value: number, isCount = false): string {
@@ -374,10 +393,10 @@ export class DashboardComponent implements OnInit {
     const d = this.data;
 
     this.glanceStats = [
-      { label: this.dayMetricLabel('Purchases'), value: d.todayPurchase, tone: 'teal' },
-      { label: this.dayMetricLabel('Profit'), value: d.todayProfit, tone: 'emerald' },
-      { label: 'Cash in hand', value: d.cashInHand, tone: 'slate' },
-      { label: 'Bank balance', value: d.bankBalance, tone: 'sky' }
+      { label: this.dayMetricLabel('Purchases'), value: d.todayPurchase, tone: 'teal', icon: '↓', route: '/transactions/purchases' },
+      { label: this.dayMetricLabel('Profit'), value: d.todayProfit, tone: 'emerald', icon: '↗', route: '/reports' },
+      { label: 'To collect', value: d.customerOutstanding, tone: 'amber', icon: '↙', route: '/transactions/customer-payments' },
+      { label: 'To pay', value: d.supplierOutstanding, tone: 'rose', icon: '↗', route: '/transactions/supplier-payments' }
     ];
   }
 }

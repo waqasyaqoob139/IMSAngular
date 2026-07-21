@@ -1,6 +1,6 @@
 import { ChangeDetectorRef, Component, HostListener, OnDestroy, OnInit } from '@angular/core';
-import { Router } from '@angular/router';
-import { Subscription } from 'rxjs';
+import { NavigationEnd, Router } from '@angular/router';
+import { filter, Subscription } from 'rxjs';
 import { AuthService } from '../../core/services/auth.service';
 import { ApiService } from '../../core/services/api.service';
 import { CompanyBrandingService } from '../../core/services/company-branding.service';
@@ -27,7 +27,10 @@ export class MainLayoutComponent implements OnInit, OnDestroy {
   searchResult: SearchResult | null = null;
   /** After clicking a menu link, keep hover menus closed until the pointer leaves the nav. */
   navMenusLocked = false;
+  mobileMenuOpen = false;
+  mobileOpenSection: string | null = null;
   private draftsSub?: Subscription;
+  private routerSub?: Subscription;
 
   constructor(
     private auth: AuthService,
@@ -41,15 +44,21 @@ export class MainLayoutComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.branding.load();
     this.draftsSub = this.txnHold.draftsChanged$.subscribe(() => this.cdr.markForCheck());
+    this.routerSub = this.router.events
+      .pipe(filter(event => event instanceof NavigationEnd))
+      .subscribe(() => this.closeMobileMenu());
   }
 
   ngOnDestroy(): void {
     this.draftsSub?.unsubscribe();
+    this.routerSub?.unsubscribe();
+    document.body.classList.remove('ims-mobile-menu-open');
   }
 
   onNavMenuClick(event: MouseEvent): void {
     const target = event.target as HTMLElement | null;
     if (!target?.closest('a.dropdown-item, a.nav-link')) return;
+    this.closeMobileMenu();
     this.navMenusLocked = true;
     // Also close any Bootstrap "show" state from click-toggles.
     document.querySelectorAll('.app-nav-menu .dropdown-menu.show').forEach(el => {
@@ -59,6 +68,33 @@ export class MainLayoutComponent implements OnInit, OnDestroy {
       el.classList.remove('show');
       el.setAttribute('aria-expanded', 'false');
     });
+  }
+
+  toggleMobileMenu(): void {
+    this.mobileMenuOpen = !this.mobileMenuOpen;
+    if (!this.mobileMenuOpen) this.mobileOpenSection = null;
+    document.body.classList.toggle('ims-mobile-menu-open', this.mobileMenuOpen);
+    if (!this.mobileMenuOpen) this.closeSearch();
+  }
+
+  closeMobileMenu(): void {
+    this.mobileMenuOpen = false;
+    this.mobileOpenSection = null;
+    document.body.classList.remove('ims-mobile-menu-open');
+    this.closeSearch();
+  }
+
+  toggleMobileSection(section: string, event: Event): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.mobileOpenSection = this.mobileOpenSection === section ? null : section;
+  }
+
+  @HostListener('window:resize')
+  onWindowResize(): void {
+    if (window.innerWidth >= 992 && this.mobileMenuOpen) {
+      this.closeMobileMenu();
+    }
   }
 
   get user() {
@@ -113,6 +149,11 @@ export class MainLayoutComponent implements OnInit, OnDestroy {
 
   @HostListener('document:keydown', ['$event'])
   onGlobalTxnShortcut(event: KeyboardEvent): void {
+    if (event.key === 'Escape' && this.mobileMenuOpen) {
+      event.preventDefault();
+      this.closeMobileMenu();
+      return;
+    }
     if (!event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
     if (event.key.toLowerCase() !== 'p') return;
     if (shouldBlockPageShortcut()) return;

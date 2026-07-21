@@ -23,7 +23,13 @@
             <tr *ngFor="let r of items">
               <td><strong>{{ r.saleReturnNumber }}</strong></td>
               <td>{{ r.returnDate | appDate:'datetime' }}</td>
-              <td>{{ r.saleNumber }}</td>
+              <td>
+                <a class="invoice-link" [routerLink]="['/transactions/sales']"
+                  [queryParams]="{ id: r.saleId, from: 'sale-returns' }"
+                  [attr.aria-label]="'Open invoice ' + r.saleNumber">
+                  {{ r.saleNumber }}
+                </a>
+              </td>
               <td>{{ r.customerName || '—' }}</td>
               <td>{{ r.grandTotal | number:'1.2-2' }}</td>
               <td>{{ r.createdByUsername || '—' }}</td>
@@ -44,23 +50,120 @@
   </ng-container>
 
   <ng-container *ngIf="viewId">
-    <div class="content-panel">
-      <div class="toolbar">
-        <button type="button" class="txn-list-link" (click)="closeView()">← Back</button>
-        <span class="toolbar-title">Return {{ viewDetail?.['saleReturnNumber'] || '...' }}</span>
-      </div>
-      <div *ngIf="loadingView" class="loading-row">Loading...</div>
-      <div class="section-card invoice-view" *ngIf="!loadingView && viewDetail">
-        <div class="section-card__body">
-          <div class="info-grid">
-            <div class="info-item"><label>Sale</label><span>{{ viewDetail['saleNumber'] }}</span></div>
-            <div class="info-item"><label>Customer</label><span>{{ viewDetail['customerName'] || '—' }}</span></div>
-            <div class="info-item"><label>Date</label><span>{{ $any(viewDetail['returnDate']) | appDate:'datetime' }}</span></div>
-            <div class="info-item"><label>Total</label><span>{{ $any(viewDetail['grandTotal']) | number:'1.2-2' }}</span></div>
+    <div class="return-view-header">
+      <button type="button" class="txn-list-link" (click)="closeView()">← Back to returns</button>
+      <span>Sale return details</span>
+    </div>
+
+    <div *ngIf="loadingView" class="return-view-loading">
+      <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+      Loading return details...
+    </div>
+
+    <main class="return-detail" *ngIf="!loadingView && viewDetail as detail">
+      <section class="return-hero">
+        <div class="return-hero__identity">
+          <div>
+            <span class="return-hero__eyebrow">Sale return</span>
+            <h3>{{ detail.saleReturnNumber }}</h3>
+          </div>
+          <span class="return-refund-badge">{{ detail.refundMethodName }} refund</span>
+        </div>
+
+        <div class="return-summary-grid">
+          <div class="return-summary-item">
+            <span>Original invoice</span>
+            <a [routerLink]="['/transactions/sales']"
+              [queryParams]="{ id: detail.saleId, from: 'sale-returns', returnId: detail.saleReturnId }">
+              {{ detail.saleNumber }} →
+            </a>
+          </div>
+          <div class="return-summary-item">
+            <span>Customer</span>
+            <strong>{{ detail.customerName || 'Walk-in customer' }}</strong>
+          </div>
+          <div class="return-summary-item">
+            <span>Return date</span>
+            <strong>{{ detail.returnDate | appDate:'datetime' }}</strong>
+          </div>
+          <div class="return-summary-item">
+            <span>Location</span>
+            <strong>{{ detail.locationName }}</strong>
           </div>
         </div>
-      </div>
-    </div>
+
+        <div class="return-reason">
+          <span>Return reason</span>
+          <p>{{ detail.reason || 'No reason was entered for this return.' }}</p>
+        </div>
+      </section>
+
+      <section class="return-totals">
+        <div>
+          <span>Returned items</span>
+          <strong>{{ detail.lines.length }}</strong>
+        </div>
+        <div>
+          <span>Subtotal</span>
+          <strong>{{ detail.subTotal | number:'1.2-2' }}</strong>
+        </div>
+        <div>
+          <span>Tax</span>
+          <strong>{{ detail.taxAmount | number:'1.2-2' }}</strong>
+        </div>
+        <div class="return-totals__grand">
+          <span>Total refunded</span>
+          <strong>{{ detail.grandTotal | number:'1.2-2' }}</strong>
+        </div>
+      </section>
+
+      <section class="return-items-card">
+        <div class="return-items-card__head">
+          <div>
+            <span>Returned inventory</span>
+            <h5>Items in this return</h5>
+          </div>
+          <span class="return-item-count">{{ detail.lines.length }} {{ detail.lines.length === 1 ? 'item' : 'items' }}</span>
+        </div>
+        <div class="data-table-wrap">
+          <table class="data-table return-lines-table">
+            <thead>
+              <tr>
+                <th>Product</th>
+                <th class="text-end">Returned qty</th>
+                <th class="text-end">Unit price</th>
+                <th class="text-end">Line total</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngIf="detail.lines.length === 0" class="empty-row">
+                <td colspan="4">No returned items found.</td>
+              </tr>
+              <tr *ngFor="let line of detail.lines">
+                <td>
+                  <div class="return-product">
+                    <span>{{ line.productName.charAt(0) }}</span>
+                    <strong>{{ line.productName }}</strong>
+                  </div>
+                </td>
+                <td class="text-end"><span class="return-qty">{{ line.returnQuantity | number:'1.0-4' }}</span></td>
+                <td class="text-end">{{ line.unitPrice | number:'1.2-2' }}</td>
+                <td class="text-end return-line-total">{{ line.lineTotal | number:'1.2-2' }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="return-audit">
+        <span class="return-audit__mark">✓</span>
+        <div>
+          <span>Created by</span>
+          <strong>{{ detail.createdByUsername || 'Unknown user' }}</strong>
+          <small>{{ detail.createdOn | appDate:'datetime' }}</small>
+        </div>
+      </section>
+    </main>
   </ng-container>
 
   <ng-container *ngIf="showForm">

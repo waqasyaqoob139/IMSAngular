@@ -49,100 +49,97 @@
 
   <ng-container *ngIf="!loading && data">
     <div class="dash-refreshing" *ngIf="dashboardLoading" aria-live="polite">Updating…</div>
-    <!-- Setup -->
-    <section class="dash-setup mb-2" *ngIf="setup && setup.completedCount < setup.totalCount">
-      <div class="dash-setup__head">
-        <div>
-          <strong>Complete your setup</strong>
-          <span class="text-muted ms-2">{{ setup.completedCount }}/{{ setup.totalCount }} done</span>
-        </div>
-        <div class="progress dash-setup__bar">
-          <div class="progress-bar" [style.width.%]="setupProgress"></div>
-        </div>
-      </div>
-      <div class="dash-setup__steps">
-        <a *ngFor="let step of setup.steps" [routerLink]="step.route" class="dash-setup__chip" [class.done]="step.isComplete">
-          {{ step.isComplete ? '✓' : '○' }} {{ step.title }}
-        </a>
-      </div>
-    </section>
-
-    <!-- Highlight: day's sales -->
-    <section class="dash-highlight mb-2">
-      <div class="dash-highlight__main">
-        <div class="dash-highlight__head">
-          <span class="dash-highlight__label">{{ salesHighlightLabel }}</span>
-          <div class="dash-date-picker">
-            <label class="visually-hidden" for="dash-date">View date</label>
-            <input
-              id="dash-date"
-              type="date"
-              class="form-control form-control-sm dash-date-picker__input"
-              [ngModel]="selectedDate"
-              (ngModelChange)="onSelectedDateChange($event)"
-              [disabled]="dashboardLoading"
-              title="View date" />
-            <button
-              type="button"
-              class="dash-date-picker__today"
-              *ngIf="!isViewingToday"
-              (click)="goToToday()"
-              [disabled]="dashboardLoading">
-              Today
-            </button>
+    <div class="dash-overview-grid mb-2">
+      <!-- Highlight: day's sales -->
+      <section class="dash-highlight">
+        <div class="dash-highlight__main">
+          <div class="dash-highlight__head">
+            <span class="dash-highlight__label">{{ salesHighlightLabel }}</span>
+            <div class="dash-date-picker">
+              <label class="visually-hidden" for="dash-date">View date</label>
+              <input
+                id="dash-date"
+                type="date"
+                class="form-control form-control-sm dash-date-picker__input"
+                [ngModel]="selectedDate"
+                (ngModelChange)="onSelectedDateChange($event)"
+                [disabled]="dashboardLoading"
+                title="View date" />
+              <button
+                type="button"
+                class="dash-date-picker__today"
+                *ngIf="!isViewingToday"
+                (click)="goToToday()"
+                [disabled]="dashboardLoading">
+                Today
+              </button>
+            </div>
           </div>
+          <span class="dash-highlight__value">{{ displayMoneyLabel(data.todaySales) }}</span>
+          <span class="dash-highlight__sub">
+            {{ dayMetricLabel('Profit') }} {{ displayMoneyLabel(data.todayProfit) }}
+            <span class="mx-1">·</span>
+            {{ monthProfitLabel }} {{ displayMoneyLabel(data.monthProfit) }}
+          </span>
         </div>
-        <span class="dash-highlight__value">{{ displayMoneyLabel(data.todaySales) }}</span>
-        <span class="dash-highlight__sub">
-          {{ dayMetricLabel('Profit') }} {{ displayMoneyLabel(data.todayProfit) }}
-          <span class="mx-1">·</span>
-          {{ monthProfitLabel }} {{ displayMoneyLabel(data.monthProfit) }}
-        </span>
-      </div>
-      <div class="dash-highlight__dues">
-        <a class="due-pill due-pill--collect" routerLink="/transactions/customer-payments">
-          <span class="due-pill__label">To collect</span>
-          <span class="due-pill__value">{{ displayMoneyLabel(data.customerOutstanding) }}</span>
-        </a>
-        <a class="due-pill due-pill--pay" routerLink="/transactions/supplier-payments">
-          <span class="due-pill__label">To pay</span>
-          <span class="due-pill__value">{{ displayMoneyLabel(data.supplierOutstanding) }}</span>
-        </a>
-      </div>
-    </section>
+      </section>
+
+      <aside class="dash-funds">
+        <div class="dash-funds__head">
+          <span>Available funds</span>
+          <span class="dash-funds__status">Live</span>
+        </div>
+        <strong class="dash-funds__total">{{ displayMoneyLabel(availableFunds) }}</strong>
+        <div class="dash-funds__split">
+          <div><span>Cash in hand</span><strong>{{ displayMoneyLabel(data.cashInHand) }}</strong></div>
+          <div><span>Bank balance</span><strong>{{ displayMoneyLabel(data.bankBalance) }}</strong></div>
+        </div>
+      </aside>
+    </div>
 
     <!-- Quick stats -->
     <section class="dash-glance mb-2">
-      <div class="dash-glance__item" *ngFor="let stat of glanceStats" [class]="'dash-glance__item--' + stat.tone">
-        <span class="dash-glance__label">{{ stat.label }}</span>
-        <span class="dash-glance__value">{{ displayMoneyLabel(stat.value) }}</span>
-      </div>
-      <a class="dash-glance__item dash-glance__item--amber dash-glance__item--link" routerLink="/transactions/customer-payments">
-        <span class="dash-glance__label">To collect</span>
-        <span class="dash-glance__value">{{ displayMoneyLabel(data.customerOutstanding) }}</span>
-      </a>
-      <a class="dash-glance__item dash-glance__item--rose dash-glance__item--link" routerLink="/transactions/supplier-payments">
-        <span class="dash-glance__label">To pay</span>
-        <span class="dash-glance__value">{{ displayMoneyLabel(data.supplierOutstanding) }}</span>
+      <a class="dash-glance__item dash-glance__item--link" *ngFor="let stat of glanceStats"
+        [class]="'dash-glance__item dash-glance__item--link dash-glance__item--' + stat.tone"
+        [routerLink]="stat.route">
+        <span class="dash-glance__icon">{{ stat.icon }}</span>
+        <span class="dash-glance__body">
+          <span class="dash-glance__label">{{ stat.label }}</span>
+          <span class="dash-glance__value">{{ displayMoneyLabel(stat.value) }}</span>
+        </span>
+        <span class="dash-glance__arrow">→</span>
       </a>
     </section>
 
-    <!-- Inventory status -->
-    <div class="stock-strip mb-2">
-      <span class="stock-strip__label">Inventory</span>
-      <a
-        routerLink="/reports"
-        class="stock-strip__item"
-        [class.stock-strip__item--warn]="data.lowStockCount > 0">
-        {{ data.lowStockCount }} low stock
-      </a>
-      <a
-        routerLink="/reports"
-        class="stock-strip__item"
-        [class.stock-strip__item--danger]="data.outOfStockCount > 0">
-        {{ data.outOfStockCount }} out of stock
-      </a>
-    </div>
+    <!-- Inventory signals -->
+    <section class="dash-smart mb-2">
+      <div class="dash-smart__head">
+        <span class="dash-smart__spark">✦</span>
+        <div>
+          <strong>Inventory status</strong>
+          <span>Products requiring action</span>
+        </div>
+      </div>
+      <div class="dash-smart__grid" *ngIf="smartInsights.length; else businessClear">
+        <a *ngFor="let insight of smartInsights"
+          [class]="'dash-smart__item dash-smart__item--' + insight.tone"
+          [routerLink]="insight.route"
+          [queryParams]="insight.queryParams">
+          <span class="dash-smart__icon">{{ insight.icon }}</span>
+          <span class="dash-smart__body">
+            <strong>{{ insight.title }}</strong>
+            <small>{{ insight.detail }}</small>
+          </span>
+          <span class="dash-smart__arrow">→</span>
+        </a>
+      </div>
+      <ng-template #businessClear>
+        <div class="dash-smart__clear">
+          <span>✓</span>
+          <div><strong>Inventory looks healthy</strong><small>No low-stock or out-of-stock products.</small></div>
+        </div>
+      </ng-template>
+    </section>
 
     <!-- Activity -->
     <section class="row g-2">

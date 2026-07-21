@@ -62,7 +62,9 @@
       <input class="form-control" placeholder="Search product..." [(ngModel)]="search" (keyup.enter)="loadStock()" />
       <button class="btn btn-primary" (click)="loadStock()" [disabled]="loading">Refresh</button>
       <span class="hint-text" *ngIf="stockView === 'low' && !loading">
-        {{ stockRows.length }} low-stock item{{ stockRows.length === 1 ? '' : 's' }}
+        {{ stockRows.length }}
+        {{ !lowStockUseMinLevel && lowStockMax === 0 ? 'out-of-stock' : 'low-stock' }}
+        item{{ stockRows.length === 1 ? '' : 's' }}
       </span>
     </div>
 
@@ -173,7 +175,9 @@
         <tbody>
           <tr *ngIf="stockRows.length === 0" class="empty-row">
             <td colspan="8">
-              {{ stockView === 'low' ? 'No low-stock items for this filter.' : 'No products found.' }}
+              {{ stockView === 'low'
+                ? (!lowStockUseMinLevel && lowStockMax === 0 ? 'No out-of-stock items.' : 'No low-stock items for this filter.')
+                : 'No products found.' }}
             </td>
           </tr>
           <tr *ngFor="let r of stockRows" [class.row-muted]="r.currentStock <= 0" [class.text-danger]="r.currentStock > 0 && r.currentStock <= 5">

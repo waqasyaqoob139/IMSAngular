@@ -87,12 +87,12 @@
   padding: 0.35rem;
   display: flex;
   flex-direction: column;
-  min-width: 10rem;
+  min-width: min(10rem, calc(100vw - 1rem));
   max-width: min(22rem, calc(100vw - 1rem));
   box-sizing: border-box;
 
   &--wide {
-    min-width: 17.5rem;
+    min-width: min(17.5rem, calc(100vw - 1rem));
     max-width: min(32rem, calc(100vw - 1rem));
   }
 }

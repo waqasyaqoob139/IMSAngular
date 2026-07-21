@@ -123,6 +123,28 @@
             </table>
           </div>
         </div>
+
+        <div class="purchase-document" *ngIf="viewDetail['hasAttachmentDocument']">
+          <div class="purchase-document__head">
+            <div>
+              <span class="section-label">Purchase document</span>
+              <small *ngIf="viewDetail['attachmentFileName']">{{ viewDetail['attachmentFileName'] }}</small>
+            </div>
+            <a *ngIf="viewDocumentUrl" class="btn btn-sm btn-outline-primary"
+              [href]="viewDocumentUrl" target="_blank" rel="noopener">
+              Open document
+            </a>
+          </div>
+          <div *ngIf="loadingDocument" class="loading-row">Loading document...</div>
+          <img *ngIf="!loadingDocument && viewDocumentUrl && viewDocumentIsImage"
+            class="purchase-document__preview"
+            [src]="viewDocumentUrl"
+            [alt]="$any(viewDetail['attachmentFileName']) || 'Purchase document'" />
+          <div *ngIf="!loadingDocument && viewDocumentUrl && !viewDocumentIsImage"
+            class="purchase-document__pdf">
+            PDF document attached. Use “Open document” to view it.
+          </div>
+        </div>
       </div>
     </div>
     </div>
@@ -176,16 +198,36 @@
                     (keydown.enter)="onQuickFieldEnter($event, 'invoiceDate')" />
                 </div>
                 <div class="col-6 col-md-2 col-lg-2">
-                  <label class="form-label">Location <span class="text-danger">*</span></label>
+                  <label class="form-label">Location <span class="text-muted">(optional)</span></label>
                   <app-searchable-select formControlName="locationId" txnFocus="location"
-                    [items]="locationSelectOptions" placeholder="Choose..."
+                    [items]="locationSelectOptions" placeholder="Use default"
                     (openChange)="onHeaderSelectOpenChange($event)"
                     [disabled]="loadingLookups" (keydown.enter)="onQuickFieldEnter($event, 'location')" />
                 </div>
-                <div class="col-12 col-md-5 col-lg-5">
+                <div class="col-12 col-md-3 col-lg-3">
                   <label class="form-label">Notes</label>
                   <input class="form-control" formControlName="remarks" data-txn-focus="remarks" placeholder="Optional"
                     (keydown.enter)="onQuickFieldEnter($event, 'remarks')" />
+                </div>
+                <div class="col-6 col-md-2 col-lg-2 purchase-document-field">
+                  <label class="form-label">Document <span class="text-muted">(optional)</span></label>
+                  <input
+                    #documentInput
+                    type="file"
+                    class="d-none"
+                    accept="image/jpeg,image/png,image/webp,image/gif,application/pdf,.jpg,.jpeg,.png,.webp,.gif,.pdf"
+                    (change)="onDocumentSelected($event)"
+                    [disabled]="saving" />
+                  <div class="purchase-upload-inline">
+                    <button type="button" class="btn btn-outline-secondary btn-sm"
+                      (click)="documentInput.click()" [disabled]="saving"
+                      title="JPG, PNG, WEBP, GIF, or PDF — max 5 MB">
+                      <span>{{ documentFile?.name || 'Attach' }}</span>
+                    </button>
+                    <button *ngIf="documentFile" type="button" class="purchase-upload-inline__remove"
+                      (click)="clearDocumentSelection(documentInput)" [disabled]="saving"
+                      aria-label="Remove purchase document" title="Remove document">×</button>
+                  </div>
                 </div>
               </div>
             </div>

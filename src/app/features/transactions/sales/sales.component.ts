@@ -1499,8 +1499,16 @@ export class SalesComponent implements OnInit, OnDestroy {
   }
 
   closeView(): void {
-    if (this.route.snapshot.queryParams['from'] === 'reports') {
+    const params = this.route.snapshot.queryParams;
+    if (params['from'] === 'reports') {
       this.router.navigate(['/reports']);
+      return;
+    }
+    if (params['from'] === 'sale-returns') {
+      const returnId = Number(params['returnId']);
+      this.router.navigate(['/transactions/sale-returns'], {
+        queryParams: returnId > 0 ? { id: returnId } : { view: 'list' }
+      });
       return;
     }
     this.openList();

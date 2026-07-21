@@ -1,6 +1,7 @@
 import { NgModule } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ReactiveFormsModule, FormsModule } from '@angular/forms';
+import { RouterModule } from '@angular/router';
 
 import { PurchasesComponent } from './purchases/purchases.component';
 import { SalesComponent } from './sales/sales.component';
@@ -35,6 +36,7 @@ import { AppDatePipe } from '../../shared/pipes/app-date.pipe';
     CommonModule,
     ReactiveFormsModule,
     FormsModule,
+    RouterModule,
     SharedModule,
     SearchableSelectComponent,
     AppDatePipe

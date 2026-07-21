@@ -1,4 +1,5 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
+import { ActivatedRoute } from '@angular/router';
 import { Subject, debounceTime, distinctUntilChanged, finalize, switchMap, takeUntil } from 'rxjs';
 import { ApiService } from '../../../core/services/api.service';
 import { PaginatedList } from '../../../core/models/api.models';
@@ -117,6 +118,7 @@ export class ReportsHubComponent implements OnInit, OnDestroy {
   lowStockUseMinLevel = false;
 
   readonly lowStockThresholdOptions: SearchableSelectOption[] = [
+    { value: 0, label: 'Out of stock only' },
     { value: 3, label: 'Stock ≤ 3' },
     { value: 5, label: 'Stock ≤ 5' },
     { value: 10, label: 'Stock ≤ 10' },
@@ -144,15 +146,34 @@ export class ReportsHubComponent implements OnInit, OnDestroy {
     return mapNamedOptions(this.products);
   }
 
-  constructor(private api: ApiService) {}
+  constructor(private api: ApiService, private route: ActivatedRoute) {}
 
   ngOnInit(): void {
     this.setDateRange('month');
+    this.applyRouteFilters();
     this.loadProducts();
     this.bindProductSearch();
     this.bindSalesReload();
     this.bindPurchasesReload();
-    this.loadSales();
+    this.reloadActiveReport();
+  }
+
+  private applyRouteFilters(): void {
+    const params = this.route.snapshot.queryParams;
+    if (params['tab'] !== 'stock') return;
+
+    this.activeTab = 'stock';
+    this.stockView = 'low';
+    if (params['belowMinimum'] === true || params['belowMinimum'] === 'true') {
+      this.lowStockUseMinLevel = true;
+      return;
+    }
+
+    const maxStock = Number(params['maxStock']);
+    if (Number.isFinite(maxStock) && maxStock >= 0) {
+      this.lowStockMax = maxStock;
+      this.lowStockUseMinLevel = false;
+    }
   }
 
   ngOnDestroy(): void {
@@ -272,7 +293,7 @@ export class ReportsHubComponent implements OnInit, OnDestroy {
 
   onLowStockThresholdChange(value: unknown): void {
     const n = Number(value);
-    this.lowStockMax = Number.isFinite(n) && n > 0 ? n : 5;
+    this.lowStockMax = Number.isFinite(n) && n >= 0 ? n : 5;
     this.lowStockUseMinLevel = false;
     this.onStockFiltersChange();
   }
