@@ -3,6 +3,7 @@ import { FormArray, FormBuilder, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { finalize, switchMap, of, map, Subject, debounceTime, distinctUntilChanged, takeUntil } from 'rxjs';
 import { ApiService } from '../../../core/services/api.service';
+import { UiDialogService } from '../../../core/services/ui-dialog.service';
 import {
   PurchaseHoldFormValue,
   TxnHoldDraft,
@@ -136,7 +137,8 @@ export class PurchasesComponent implements OnInit, OnDestroy {
     private route: ActivatedRoute,
     private router: Router,
     private txnHold: TxnHoldService,
-    private lookupsService: LookupsService
+    private lookupsService: LookupsService,
+    private dialogs: UiDialogService
   ) {
     this.form = this.fb.group({
       supplierId: [null as number | null],
@@ -1257,13 +1259,17 @@ export class PurchasesComponent implements OnInit, OnDestroy {
     this.openList();
   }
 
-  clearAll(): void {
+  async clearAll(): Promise<void> {
     if (this.saving) return;
     if (
       this.filledLineIndices.length > 0 ||
       this.hasDraftContent()
     ) {
-      if (!confirm('Clear this purchase form? All entered lines will be removed.')) return;
+      if (!(await this.dialogs.confirm('Clear this purchase form? All entered lines will be removed.', {
+        title: 'Clear Purchase',
+        severity: 'warning',
+        confirmLabel: 'Clear'
+      }))) return;
     }
     this.txnHold.clearActiveDraft('purchase');
     this.router.navigate(['/transactions/purchases'], { replaceUrl: true });

@@ -16,6 +16,7 @@ import { UsersModule } from './features/users/users.module';
 import { HrModule } from './features/hr/hr.module';
 import { authInterceptor } from './core/interceptors/auth.interceptor';
 import { globalLoadingInterceptor } from './core/interceptors/global-loading.interceptor';
+import { UiDialogComponent } from './shared/components/ui-dialog/ui-dialog.component';
 
 @NgModule({
   declarations: [App],
@@ -31,7 +32,8 @@ import { globalLoadingInterceptor } from './core/interceptors/global-loading.int
     ReportsModule,
     SettingsModule,
     UsersModule,
-    HrModule
+    HrModule,
+    UiDialogComponent
   ],
   providers: [
     provideZoneChangeDetection({ eventCoalescing: true }),

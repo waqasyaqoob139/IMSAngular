@@ -4,6 +4,7 @@ import { finalize, forkJoin } from 'rxjs';
 import { ApiService } from '../../../core/services/api.service';
 import { AuthService } from '../../../core/services/auth.service';
 import { LookupsService } from '../../../core/services/lookups.service';
+import { UiDialogService } from '../../../core/services/ui-dialog.service';
 import { LookupsDto, PaginatedList, getApiErrorMessage } from '../../../core/models/api.models';
 import { mapNamedOptions, SearchableSelectOption } from '../../../shared/components/searchable-select/searchable-select.models';
 import { blockSaveIfInvalid } from '../../../core/utils/form-validation';
@@ -128,7 +129,8 @@ export class ProductsComponent implements OnInit {
     private fb: FormBuilder,
     private auth: AuthService,
     private lookupsService: LookupsService,
-    private cdr: ChangeDetectorRef
+    private cdr: ChangeDetectorRef,
+    private dialogs: UiDialogService
   ) {
     this.form = this.fb.group({
       barcode: [''],
@@ -636,8 +638,12 @@ export class ProductsComponent implements OnInit {
     });
   }
 
-  remove(product: Product): void {
-    if (!confirm(`Delete product "${product.productName}"?`)) return;
+  async remove(product: Product): Promise<void> {
+    if (!(await this.dialogs.confirm(`Delete product "${product.productName}"?`, {
+      title: 'Delete Product',
+      severity: 'danger',
+      confirmLabel: 'Delete'
+    }))) return;
     this.loading = true;
     this.api
       .delete(`/products/${product.productId}`)

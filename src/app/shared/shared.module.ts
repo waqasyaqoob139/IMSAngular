@@ -8,6 +8,7 @@ import { SearchableSelectComponent } from './components/searchable-select/search
 import { ListPaginationComponent } from './components/list-pagination/list-pagination.component';
 import { MaskedProfitComponent } from './components/masked-profit/masked-profit.component';
 import { ActionIconButtonComponent } from './components/action-icon-button/action-icon-button.component';
+import { UiAlertComponent } from './components/ui-alert/ui-alert.component';
 
 @NgModule({
   imports: [
@@ -20,7 +21,8 @@ import { ActionIconButtonComponent } from './components/action-icon-button/actio
     SearchableSelectComponent,
     ListPaginationComponent,
     MaskedProfitComponent,
-    ActionIconButtonComponent
+    ActionIconButtonComponent,
+    UiAlertComponent
   ],
   exports: [
     CommonModule,
@@ -32,7 +34,8 @@ import { ActionIconButtonComponent } from './components/action-icon-button/actio
     SearchableSelectComponent,
     ListPaginationComponent,
     MaskedProfitComponent,
-    ActionIconButtonComponent
+    ActionIconButtonComponent,
+    UiAlertComponent
   ]
 })
 export class SharedModule {}

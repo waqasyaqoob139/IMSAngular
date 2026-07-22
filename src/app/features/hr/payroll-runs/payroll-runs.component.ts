@@ -2,6 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import { FormBuilder, Validators } from '@angular/forms';
 import { finalize } from 'rxjs';
 import { ApiService } from '../../../core/services/api.service';
+import { UiDialogService } from '../../../core/services/ui-dialog.service';
 import { getApiErrorMessage, PaginatedList } from '../../../core/models/api.models';
 import { blockSaveIfInvalid } from '../../../core/utils/form-validation';
 import { ListPagination } from '../../../core/utils/list-pagination';
@@ -76,7 +77,11 @@ export class PayrollRunsComponent implements OnInit {
   viewId: number | null = null;
   headerForm;
 
-  constructor(private api: ApiService, private fb: FormBuilder) {
+  constructor(
+    private api: ApiService,
+    private fb: FormBuilder,
+    private dialogs: UiDialogService
+  ) {
     const month = this.currentMonth();
     this.headerForm = this.fb.group({
       month: [month, Validators.required],
@@ -323,9 +328,13 @@ export class PayrollRunsComponent implements OnInit {
       });
   }
 
-  finalizeRun(): void {
+  async finalizeRun(): Promise<void> {
     if (!this.detail || this.saving) return;
-    if (!confirm('Finalize this payroll? Deductions and amounts will be locked.')) return;
+    if (!(await this.dialogs.confirm('Finalize this payroll? Deductions and amounts will be locked.', {
+      title: 'Finalize Payroll',
+      severity: 'warning',
+      confirmLabel: 'Finalize'
+    }))) return;
 
     this.saving = true;
     this.errorMessage = '';
@@ -367,9 +376,13 @@ export class PayrollRunsComponent implements OnInit {
       });
   }
 
-  payAll(): void {
+  async payAll(): Promise<void> {
     if (!this.detail || this.payingAll || this.unpaidCount === 0) return;
-    if (!confirm(`Pay all ${this.unpaidCount} unpaid employee(s)?`)) return;
+    if (!(await this.dialogs.confirm(`Pay all ${this.unpaidCount} unpaid employee(s)?`, {
+      title: 'Pay All',
+      severity: 'warning',
+      confirmLabel: 'Pay All'
+    }))) return;
 
     this.payingAll = true;
     this.errorMessage = '';
@@ -390,8 +403,12 @@ export class PayrollRunsComponent implements OnInit {
       });
   }
 
-  removeRun(item: PayrollRunListItem): void {
-    if (!confirm(`Delete payroll ${item.runNumber}?`)) return;
+  async removeRun(item: PayrollRunListItem): Promise<void> {
+    if (!(await this.dialogs.confirm(`Delete payroll ${item.runNumber}?`, {
+      title: 'Delete Payroll',
+      severity: 'danger',
+      confirmLabel: 'Delete'
+    }))) return;
     this.loading = true;
     this.api
       .delete(`/payrollruns/${item.payrollRunId}`)

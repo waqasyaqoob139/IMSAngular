@@ -3,6 +3,7 @@ import { FormBuilder, Validators } from '@angular/forms';
 import { finalize } from 'rxjs';
 import { ApiService } from '../../../core/services/api.service';
 import { LookupsService } from '../../../core/services/lookups.service';
+import { UiDialogService } from '../../../core/services/ui-dialog.service';
 import { PaginatedList } from '../../../core/models/api.models';
 import { blockSaveIfInvalid } from '../../../core/utils/form-validation';
 import { ListPagination } from '../../../core/utils/list-pagination';
@@ -28,7 +29,8 @@ export class BrandsComponent implements OnInit {
   constructor(
     private api: ApiService,
     private fb: FormBuilder,
-    private lookupsService: LookupsService
+    private lookupsService: LookupsService,
+    private dialogs: UiDialogService
   ) {
     this.form = this.fb.group({ brandName: ['', Validators.required], isActive: [true] });
   }
@@ -112,8 +114,12 @@ export class BrandsComponent implements OnInit {
     });
   }
 
-  remove(item: Brand): void {
-    if (!confirm(`Delete "${item.brandName}"?`)) return;
+  async remove(item: Brand): Promise<void> {
+    if (!(await this.dialogs.confirm(`Delete "${item.brandName}"?`, {
+      title: 'Delete Brand',
+      severity: 'danger',
+      confirmLabel: 'Delete'
+    }))) return;
     this.loading = true;
     this.api
       .delete(`/brands/${item.brandId}`)

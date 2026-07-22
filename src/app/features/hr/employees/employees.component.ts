@@ -2,6 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import { FormBuilder, Validators } from '@angular/forms';
 import { finalize } from 'rxjs';
 import { ApiService } from '../../../core/services/api.service';
+import { UiDialogService } from '../../../core/services/ui-dialog.service';
 import { PaginatedList } from '../../../core/models/api.models';
 import { blockSaveIfInvalid } from '../../../core/utils/form-validation';
 import { ListPagination } from '../../../core/utils/list-pagination';
@@ -50,7 +51,11 @@ export class EmployeesComponent implements OnInit {
     { value: 2, label: 'Daily wages' }
   ];
 
-  constructor(private api: ApiService, private fb: FormBuilder) {
+  constructor(
+    private api: ApiService,
+    private fb: FormBuilder,
+    private dialogs: UiDialogService
+  ) {
     this.form = this.fb.group({
       employeeCode: [''],
       fullName: ['', Validators.required],
@@ -222,8 +227,12 @@ export class EmployeesComponent implements OnInit {
     });
   }
 
-  remove(item: Employee): void {
-    if (!confirm(`Delete "${item.fullName}"?`)) return;
+  async remove(item: Employee): Promise<void> {
+    if (!(await this.dialogs.confirm(`Delete "${item.fullName}"?`, {
+      title: 'Delete Employee',
+      severity: 'danger',
+      confirmLabel: 'Delete'
+    }))) return;
     this.loading = true;
     this.api
       .delete(`/employees/${item.employeeId}`)

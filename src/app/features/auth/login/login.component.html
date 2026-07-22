@@ -26,7 +26,7 @@
           <input type="password" class="form-control" formControlName="password" autocomplete="current-password" placeholder="Enter password" />
         </div>
 
-        <div *ngIf="errorMessage" class="alert alert-danger py-2">{{ errorMessage }}</div>
+        <app-ui-alert [message]="errorMessage" severity="danger" (dismissed)="errorMessage = ''" />
 
         <button class="btn btn-primary w-100 btn-signin" type="submit" [disabled]="loading">
           {{ loading ? 'Signing in...' : 'Sign In' }}

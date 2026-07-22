@@ -3,6 +3,7 @@ import { FormBuilder, Validators } from '@angular/forms';
 import { finalize } from 'rxjs';
 import { ApiService } from '../../../core/services/api.service';
 import { LookupsService } from '../../../core/services/lookups.service';
+import { UiDialogService } from '../../../core/services/ui-dialog.service';
 import { PaginatedList } from '../../../core/models/api.models';
 import { blockSaveIfInvalid } from '../../../core/utils/form-validation';
 import { ListPagination } from '../../../core/utils/list-pagination';
@@ -35,7 +36,8 @@ export class CustomersComponent implements OnInit {
   constructor(
     private api: ApiService,
     private fb: FormBuilder,
-    private lookupsService: LookupsService
+    private lookupsService: LookupsService,
+    private dialogs: UiDialogService
   ) {
     this.form = this.fb.group({
       customerName: ['', Validators.required],
@@ -133,8 +135,12 @@ export class CustomersComponent implements OnInit {
     });
   }
 
-  remove(item: Customer): void {
-    if (!confirm(`Delete "${item.customerName}"?`)) return;
+  async remove(item: Customer): Promise<void> {
+    if (!(await this.dialogs.confirm(`Delete "${item.customerName}"?`, {
+      title: 'Delete Customer',
+      severity: 'danger',
+      confirmLabel: 'Delete'
+    }))) return;
     this.loading = true;
     this.api
       .delete(`/customers/${item.customerId}`)
