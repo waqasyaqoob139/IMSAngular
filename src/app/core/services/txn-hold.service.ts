@@ -5,6 +5,15 @@ import { TxnPaymentMode } from '../utils/txn-keyboard';
 
 export type TxnHoldKind = 'purchase' | 'sale';
 
+/** Snapshot fields so Alt+P / page resume can show name + stock before catalog reloads. */
+export interface TxnHoldProductSnapshot {
+  productName?: string;
+  sku?: string;
+  currentStock?: number;
+  shortKey?: string | null;
+  serialNo?: string | null;
+}
+
 export interface PurchaseHoldFormValue {
   supplierId: number | null;
   invoiceDate: string;
@@ -13,7 +22,7 @@ export interface PurchaseHoldFormValue {
   taxAmount: number;
   additionalCharges: number;
   remarks: string;
-  lines: Array<{ productId: number | null; quantity: number; unitCost: number }>;
+  lines: Array<{ productId: number | null; quantity: number; unitCost: number } & TxnHoldProductSnapshot>;
 }
 
 export interface SaleHoldFormValue {
@@ -23,7 +32,7 @@ export interface SaleHoldFormValue {
   discountAmount: number;
   taxAmount: number;
   remarks: string;
-  lines: Array<{ productId: number | null; quantity: number; unitPrice: number }>;
+  lines: Array<{ productId: number | null; quantity: number; unitPrice: number } & TxnHoldProductSnapshot>;
 }
 
 export interface TxnHoldDraft<TForm = Record<string, unknown>> {

@@ -2,9 +2,11 @@ import { Component, OnDestroy, OnInit } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { Subject, debounceTime, distinctUntilChanged, finalize, switchMap, takeUntil } from 'rxjs';
 import { ApiService } from '../../../core/services/api.service';
+import { ExportPrintService } from '../../../core/services/export-print.service';
 import { PaginatedList } from '../../../core/models/api.models';
 import { ListPagination, QueryParams } from '../../../core/utils/list-pagination';
 import { mapNamedOptions, SearchableSelectOption } from '../../../shared/components/searchable-select/searchable-select.models';
+import { formatAppDate } from '../../../core/utils/date-format';
 
 interface SalesReportRow {
   saleId: number;
@@ -136,6 +138,8 @@ export class ReportsHubComponent implements OnInit, OnDestroy {
   stockRows: StockReportRow[] = [];
   expenseRows: ExpenseReportRow[] = [];
   profit: ProfitReport | null = null;
+  exportMessage = '';
+  exporting = false;
 
   private readonly destroy$ = new Subject<void>();
   private readonly productSearch$ = new Subject<string>();
@@ -146,7 +150,11 @@ export class ReportsHubComponent implements OnInit, OnDestroy {
     return mapNamedOptions(this.products);
   }
 
-  constructor(private api: ApiService, private route: ActivatedRoute) {}
+  constructor(
+    private api: ApiService,
+    private route: ActivatedRoute,
+    private exportPrint: ExportPrintService
+  ) {}
 
   ngOnInit(): void {
     this.setDateRange('month');
@@ -422,6 +430,159 @@ export class ReportsHubComponent implements OnInit, OnDestroy {
           }
         }
       });
+  }
+
+  async exportActivePdf(share = false): Promise<void> {
+    if (this.exporting) return;
+    this.exporting = true;
+    this.exportMessage = '';
+
+    try {
+      const period =
+        this.activeTab === 'stock'
+          ? ''
+          : `${formatAppDate(this.fromDate)} – ${formatAppDate(this.toDate)}`;
+
+      let result: Awaited<ReturnType<ExportPrintService['exportReportPdf']>> = 'empty';
+
+      if (this.activeTab === 'sales') {
+        result = await this.exportPrint.exportReportPdf({
+          title: 'Sales Report',
+          subtitle: period,
+          filename: `Sales-Report-${this.fromDate}-${this.toDate}.pdf`,
+          share,
+          summaryLines: this.salesSummary
+            ? [
+                { label: 'Gross sales', value: this.fmt(this.salesSummary.grossSales) },
+                { label: 'Net sales', value: this.fmt(this.salesSummary.netSales) },
+                { label: 'Net profit', value: this.fmt(this.salesSummary.netProfit) }
+              ]
+            : undefined,
+          columns: [
+            { header: 'Invoice' },
+            { header: 'Date' },
+            { header: 'Customer' },
+            { header: 'Total', align: 'right' },
+            { header: 'Paid', align: 'right' },
+            { header: 'Balance', align: 'right' }
+          ],
+          rows: this.salesRows.map(r => [
+            r.saleNumber,
+            formatAppDate(r.saleDate),
+            r.customerName || 'Walk-in',
+            this.fmt(r.grandTotal),
+            this.fmt(r.paidAmount),
+            this.fmt(r.balanceAmount)
+          ])
+        });
+      } else if (this.activeTab === 'purchases') {
+        result = await this.exportPrint.exportReportPdf({
+          title: 'Purchase Report',
+          subtitle: period,
+          filename: `Purchase-Report-${this.fromDate}-${this.toDate}.pdf`,
+          share,
+          summaryLines: this.purchaseSummary
+            ? [
+                { label: 'Gross purchases', value: this.fmt(this.purchaseSummary.grossPurchases) },
+                { label: 'Net purchases', value: this.fmt(this.purchaseSummary.netPurchases) }
+              ]
+            : undefined,
+          columns: [
+            { header: 'Invoice' },
+            { header: 'Date' },
+            { header: 'Supplier' },
+            { header: 'Total', align: 'right' },
+            { header: 'Paid', align: 'right' },
+            { header: 'Balance', align: 'right' }
+          ],
+          rows: this.purchaseRows.map(r => [
+            r.purchaseNumber,
+            formatAppDate(r.invoiceDate),
+            r.supplierName,
+            this.fmt(r.grandTotal),
+            this.fmt(r.paidAmount),
+            this.fmt(r.balanceAmount)
+          ])
+        });
+      } else if (this.activeTab === 'stock') {
+        result = await this.exportPrint.exportReportPdf({
+          title: this.stockView === 'low' ? 'Low Stock Report' : 'Stock Report',
+          filename: `Stock-Report.pdf`,
+          share,
+          columns: [
+            { header: 'Product' },
+            { header: 'SKU' },
+            { header: 'Category' },
+            { header: 'Stock', align: 'right' },
+            { header: 'Value', align: 'right' }
+          ],
+          rows: this.stockRows.map(r => [
+            r.productName,
+            r.sku,
+            r.categoryName,
+            this.fmt(r.currentStock),
+            this.fmt(r.inventoryValue)
+          ])
+        });
+      } else if (this.activeTab === 'profit') {
+        result = await this.exportPrint.exportReportPdf({
+          title: 'Profit Report',
+          subtitle: period,
+          filename: `Profit-Report-${this.fromDate}-${this.toDate}.pdf`,
+          share,
+          columns: [
+            { header: 'Metric' },
+            { header: 'Amount', align: 'right' }
+          ],
+          rows: this.profit
+            ? [
+                ['Total sales', this.fmt(this.profit.totalSales)],
+                ['Total cost', this.fmt(this.profit.totalCost)],
+                ['Gross profit', this.fmt(this.profit.grossProfit)],
+                ['Expenses', this.fmt(this.profit.totalExpenses)],
+                ['Sale returns', this.fmt(this.profit.totalSaleReturns)],
+                ['Net profit', this.fmt(this.profit.netProfit)]
+              ]
+            : []
+        });
+      } else if (this.activeTab === 'expenses') {
+        result = await this.exportPrint.exportReportPdf({
+          title: 'Expense Report',
+          subtitle: period,
+          filename: `Expense-Report-${this.fromDate}-${this.toDate}.pdf`,
+          share,
+          columns: [
+            { header: 'Number' },
+            { header: 'Date' },
+            { header: 'Category' },
+            { header: 'Amount', align: 'right' },
+            { header: 'Description' }
+          ],
+          rows: this.expenseRows.map(r => [
+            r.expenseNumber,
+            formatAppDate(r.expenseDate),
+            r.categoryName,
+            this.fmt(r.amount),
+            r.description || '—'
+          ])
+        });
+      }
+
+      if (result === 'empty') this.exportMessage = 'No rows to export.';
+      else if (result === 'shared') this.exportMessage = 'PDF shared.';
+      else if (result === 'downloaded') this.exportMessage = share ? 'PDF downloaded — open WhatsApp to send it.' : 'PDF downloaded.';
+      else if (result === 'cancelled') this.exportMessage = 'Share cancelled.';
+      else this.exportMessage = 'Could not export PDF.';
+    } finally {
+      this.exporting = false;
+    }
+  }
+
+  private fmt(value: number): string {
+    return Number(value || 0).toLocaleString(undefined, {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    });
   }
 
   private toIsoDate(value: Date): string {

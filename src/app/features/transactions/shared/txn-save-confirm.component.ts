@@ -11,6 +11,9 @@ import {
 } from '@angular/core';
 import { focusTxnElement } from '../../../core/utils/txn-keyboard';
 
+/** How to finish the sale after save. */
+export type TxnSaveConfirmMode = 'none' | 'print' | 'digital';
+
 @Component({
   selector: 'app-txn-save-confirm',
   templateUrl: './txn-save-confirm.component.html',
@@ -24,17 +27,19 @@ export class TxnSaveConfirmComponent implements OnChanges, AfterViewInit {
   @Input() paymentSummary = '';
   @Input() partyLabel = '';
   @Input() saving = false;
-  /** When true, show Sale / Sale & Print options (sales only). */
+  /** When true, show Save / Save & Print / Save & Digital options. */
   @Input() printChoice = false;
   @Input() saveLabel = 'Sale';
   @Input() saveWithPrintLabel = 'Sale & Print';
+  @Input() saveWithDigitalLabel = 'Sale & Digital';
 
-  @Output() confirmed = new EventEmitter<boolean>();
+  @Output() confirmed = new EventEmitter<TxnSaveConfirmMode>();
   @Output() cancelled = new EventEmitter<void>();
 
   @ViewChild('cancelBtn') cancelBtn?: ElementRef<HTMLButtonElement>;
   @ViewChild('saveBtn') saveBtn?: ElementRef<HTMLButtonElement>;
   @ViewChild('savePrintBtn') savePrintBtn?: ElementRef<HTMLButtonElement>;
+  @ViewChild('saveDigitalBtn') saveDigitalBtn?: ElementRef<HTMLButtonElement>;
 
   ngAfterViewInit(): void {
     this.focusDefault();
@@ -68,24 +73,23 @@ export class TxnSaveConfirmComponent implements OnChanges, AfterViewInit {
     }
   }
 
-  emitConfirm(printReceipt: boolean): void {
+  emitConfirm(mode: TxnSaveConfirmMode): void {
     if (this.saving) return;
-    this.confirmed.emit(!!printReceipt);
+    this.confirmed.emit(mode);
   }
 
   private focusDefault(): void {
     if (!this.open) return;
-    // Sale first (no print) is the default action.
     focusTxnElement(this.saveBtn?.nativeElement);
   }
 
   private actionButtons(): HTMLButtonElement[] {
-    const buttons = [
+    return [
       this.cancelBtn?.nativeElement,
       this.saveBtn?.nativeElement,
-      this.savePrintBtn?.nativeElement
+      this.savePrintBtn?.nativeElement,
+      this.saveDigitalBtn?.nativeElement
     ].filter((b): b is HTMLButtonElement => !!b && !b.disabled);
-    return buttons;
   }
 
   private moveFocus(delta: number): void {
@@ -108,10 +112,13 @@ export class TxnSaveConfirmComponent implements OnChanges, AfterViewInit {
       return;
     }
     if (active === this.savePrintBtn?.nativeElement) {
-      this.emitConfirm(true);
+      this.emitConfirm('print');
       return;
     }
-    // Default / Sale button
-    this.emitConfirm(false);
+    if (active === this.saveDigitalBtn?.nativeElement) {
+      this.emitConfirm('digital');
+      return;
+    }
+    this.emitConfirm('none');
   }
 }

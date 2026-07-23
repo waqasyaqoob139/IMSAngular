@@ -1,11 +1,13 @@
 import { Component, ChangeDetectorRef, ElementRef, HostListener, OnDestroy, OnInit, ViewChild } from '@angular/core';
-import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
+import { DomSanitizer, SafeHtml, SafeResourceUrl } from '@angular/platform-browser';
 import { FormArray, FormBuilder, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
-import { finalize, switchMap, of, map, Subject, debounceTime, distinctUntilChanged, takeUntil } from 'rxjs';
+import { finalize, switchMap, of, map, Subject, debounceTime, distinctUntilChanged, takeUntil, forkJoin, catchError } from 'rxjs';
 import { ApiService } from '../../../core/services/api.service';
 import { ExportPrintService } from '../../../core/services/export-print.service';
 import { SaleReceiptService } from '../../../core/services/sale-receipt.service';
+import { PdfDocumentService, PdfCompanyInfo } from '../../../core/services/pdf-document.service';
+import { PdfShareService } from '../../../core/services/pdf-share.service';
 import { LookupsService } from '../../../core/services/lookups.service';
 import { UiDialogService } from '../../../core/services/ui-dialog.service';
 import {
@@ -27,7 +29,7 @@ import {
   SALE_HEADER_FOCUS_KEYS,
   TxnPaymentMode
 } from '../../../core/utils/txn-keyboard';
-import { formatAppDate, todayIsoDate } from '../../../core/utils/date-format';
+import { formatAppDate, formatAppDateTime, todayIsoDate } from '../../../core/utils/date-format';
 import { ListPagination } from '../../../core/utils/list-pagination';
 import { resolveTxnPaymentStatus, txnPaymentStatusLabel } from '../../../core/utils/txn-payment-status';
 import {
@@ -38,6 +40,7 @@ import {
 } from '../../../core/utils/product-search';
 import { mapNamedOptions, SearchableSelectOption } from '../../../shared/components/searchable-select/searchable-select.models';
 import { TxnBrowseProduct } from '../shared/txn-product-browse.component';
+import { TxnSaveConfirmMode } from '../shared/txn-save-confirm.component';
 
 interface SaleListItem {
   saleId: number;
@@ -114,10 +117,25 @@ export class SalesComponent implements OnInit, OnDestroy {
   activeLineIndex: number | null = null;
   viewId: number | null = null;
   viewDetail: Record<string, unknown> | null = null;
+  /** When set, form is editing an existing posted sale (reverse+repost on save). */
+  editingSaleId: number | null = null;
+  editingSaleNumber = '';
+  /** Original sold qty by product — credited back into stock checks while editing. */
+  private readonly editOriginalQtyByProduct = new Map<number, number>();
   showReceiptPreview = false;
   receiptPreviewLoading = false;
   receiptPreviewSafeHtml: SafeHtml | null = null;
   private pendingReceiptAutoPrint = false;
+
+  /** Digital PDF receipt preview (view first, then share). */
+  showPdfReceiptPreview = false;
+  pdfReceiptLoading = false;
+  pdfReceiptUrl: SafeResourceUrl | null = null;
+  private pdfReceiptObjectUrl: string | null = null;
+  pdfReceiptBlob: Blob | null = null;
+  pdfReceiptFilename = '';
+  pdfReceiptShareText = '';
+  pdfReceiptSharing = false;
 
   paymentMode: PaymentMode = 'cash';
   partialPayAmount = 0;
@@ -152,6 +170,8 @@ export class SalesComponent implements OnInit, OnDestroy {
     private router: Router,
     private exportPrint: ExportPrintService,
     private saleReceipt: SaleReceiptService,
+    private pdfDocument: PdfDocumentService,
+    private pdfShare: PdfShareService,
     private txnHold: TxnHoldService,
     private lookupsService: LookupsService,
     private cdr: ChangeDetectorRef,
@@ -183,6 +203,7 @@ export class SalesComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.closePdfReceiptPreview();
     this.persistActiveDraft();
     this.destroy$.next();
     this.destroy$.complete();
@@ -238,14 +259,28 @@ export class SalesComponent implements OnInit, OnDestroy {
   }
 
   private persistActiveDraft(): void {
-    if (!this.showForm || this.saving) return;
+    if (!this.showForm || this.saving || this.editingSaleId) return;
     if (!this.hasDraftContent()) {
       this.txnHold.clearActiveDraft('sale');
       return;
     }
 
     const v = this.form.getRawValue() as SaleHoldFormValue;
-    const lines = (v.lines ?? []).filter(l => !!l.productId && Number(l.quantity) > 0);
+    const lines = (v.lines ?? [])
+      .filter(l => !!l.productId && Number(l.quantity) > 0)
+      .map(l => {
+        const productId = Number(l.productId);
+        const p = this.productCache.get(productId) ?? this.products.find(x => x.productId === productId);
+        return {
+          ...l,
+          productId,
+          productName: p?.productName ?? l.productName,
+          sku: p?.sku ?? l.sku,
+          currentStock: p?.currentStock ?? l.currentStock,
+          shortKey: p?.shortKey ?? l.shortKey,
+          serialNo: p?.serialNo ?? l.serialNo
+        };
+      });
     const customerName = this.pendingCustomerName?.trim()
       || (v.customerId ? this.customers.find(c => c.id === Number(v.customerId))?.name ?? 'Customer' : 'Walk-in');
 
@@ -286,8 +321,12 @@ export class SalesComponent implements OnInit, OnDestroy {
   private resolveViewFromRoute(): void {
     const params = this.route.snapshot.queryParams;
     const id = Number(params['id']);
+    const editId = Number(params['edit']);
     const shouldPrint = params['print'] === '1';
-    if (id > 0) {
+    if (editId > 0) {
+      this.persistActiveDraft();
+      this.openEditById(editId);
+    } else if (id > 0) {
       this.persistActiveDraft();
       this.pendingPrintSaleId = shouldPrint ? id : null;
       this.openViewById(id);
@@ -851,7 +890,8 @@ export class SalesComponent implements OnInit, OnDestroy {
   }
 
   focusCustomerField(): void {
-    focusTxnSelector('[data-txn-focus="customer"]');
+    // Focus only — do not open the dropdown until the user clicks it.
+    setTimeout(() => focusTxnSelector('[data-txn-focus="customer"]'), 30);
   }
 
   focusSummaryPayment(): void {
@@ -1025,7 +1065,10 @@ export class SalesComponent implements OnInit, OnDestroy {
   productStock(productId: number | null): number {
     if (!productId) return 0;
     const p = this.productCache.get(productId) ?? this.products.find(x => x.productId === productId);
-    return p?.currentStock ?? 0;
+    const base = p?.currentStock ?? 0;
+    // While editing, stock is already reduced by the original sale — credit it back for checks.
+    const credit = this.editingSaleId ? (this.editOriginalQtyByProduct.get(productId) ?? 0) : 0;
+    return base + credit;
   }
 
   private rememberProduct(product: ProductOption): void {
@@ -1143,6 +1186,13 @@ export class SalesComponent implements OnInit, OnDestroy {
         this.openReceiptPreview(saleId);
       }
     });
+  }
+
+  shareViewDigital(): void {
+    if (!this.viewId) return;
+    this.message = '';
+    this.errorMessage = '';
+    this.openDigitalReceiptPreview(this.viewId);
   }
 
   closeReceiptPreview(): void {
@@ -1394,6 +1444,9 @@ export class SalesComponent implements OnInit, OnDestroy {
   showList(): void {
     this.viewId = null;
     this.viewDetail = null;
+    this.editingSaleId = null;
+    this.editingSaleNumber = '';
+    this.editOriginalQtyByProduct.clear();
     this.showForm = false;
     this.load();
     setTimeout(() => focusTxnSelector('.txn-list-search'), 0);
@@ -1411,6 +1464,9 @@ export class SalesComponent implements OnInit, OnDestroy {
   private resetCreateForm(successMessage = ''): void {
     this.viewId = null;
     this.viewDetail = null;
+    this.editingSaleId = null;
+    this.editingSaleNumber = '';
+    this.editOriginalQtyByProduct.clear();
     this.showForm = true;
     this.showAdvanced = false;
     this.showSaveConfirm = false;
@@ -1455,6 +1511,9 @@ export class SalesComponent implements OnInit, OnDestroy {
   private applyDraft(draft: TxnHoldDraft<SaleHoldFormValue>): void {
     this.viewId = null;
     this.viewDetail = null;
+    this.editingSaleId = null;
+    this.editingSaleNumber = '';
+    this.editOriginalQtyByProduct.clear();
     this.showForm = true;
     this.showSaveConfirm = false;
     this.activeLineIndex = null;
@@ -1482,9 +1541,22 @@ export class SalesComponent implements OnInit, OnDestroy {
     });
     this.lines.clear();
     for (const line of fv.lines ?? []) {
+      const productId = line.productId != null ? Number(line.productId) : null;
+      if (productId && productId > 0) {
+        const existing = this.productCache.get(productId) ?? this.products.find(x => x.productId === productId);
+        this.productCache.set(productId, {
+          productId,
+          productName: line.productName || existing?.productName || '',
+          sku: line.sku || existing?.sku || '',
+          sellingPrice: Number(line.unitPrice) || existing?.sellingPrice || 0,
+          currentStock: line.currentStock ?? existing?.currentStock ?? 0,
+          shortKey: line.shortKey ?? existing?.shortKey,
+          serialNo: line.serialNo ?? existing?.serialNo
+        });
+      }
       this.lines.push(
         this.fb.group({
-          productId: [line.productId ?? null],
+          productId: [productId],
           quantity: [Number(line.quantity) || 1, [Validators.min(0.0001)]],
           unitPrice: [Number(line.unitPrice) || 0, [Validators.min(0)]]
         })
@@ -1493,11 +1565,195 @@ export class SalesComponent implements OnInit, OnDestroy {
     this.ensureTrailingEmptyLine();
     this.syncPaymentsFromMode();
     if (!this.taxManuallyEdited) this.syncAutoTax();
+    this.refreshStockWarning();
+    this.hydrateDraftLineProducts();
     setTimeout(() => this.focusCustomerField(), 0);
+  }
+
+  /** Reload name/stock for draft lines after Alt+P or page resume (catalog starts empty). */
+  private hydrateDraftLineProducts(): void {
+    const ids = [
+      ...new Set(
+        this.filledLineIndices
+          .map(i => Number(this.lines.at(i).get('productId')?.value))
+          .filter(id => id > 0)
+      )
+    ];
+    if (!ids.length) return;
+
+    forkJoin(
+      ids.map(id =>
+        this.api.get<Record<string, unknown>>(`/products/${id}`).pipe(
+          map(res => this.mapProduct((res.data ?? {}) as Record<string, unknown>)),
+          catchError(() => of(null))
+        )
+      )
+    )
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: products => {
+          for (const p of products) {
+            if (!p) continue;
+            this.rememberProduct(p);
+            if (!this.products.some(x => x.productId === p.productId)) {
+              this.products = [...this.products, p];
+            } else {
+              this.products = this.products.map(x => (x.productId === p.productId ? p : x));
+            }
+          }
+          this.refreshStockWarning();
+          this.cdr.markForCheck();
+        }
+      });
   }
 
   openView(item: SaleListItem): void {
     this.router.navigate(['/transactions/sales'], { queryParams: { id: item.saleId } });
+  }
+
+  openEdit(item: SaleListItem): void {
+    this.router.navigate(['/transactions/sales'], { queryParams: { edit: item.saleId } });
+  }
+
+  openEditFromView(): void {
+    if (!this.viewId) return;
+    this.router.navigate(['/transactions/sales'], { queryParams: { edit: this.viewId } });
+  }
+
+  private openEditById(saleId: number): void {
+    this.viewId = null;
+    this.viewDetail = null;
+    this.showForm = false;
+    this.editingSaleId = saleId;
+    this.editingSaleNumber = '';
+    this.loadingDetail = true;
+    this.errorMessage = '';
+    this.message = '';
+
+    this.api
+      .get<Record<string, unknown>>(`/sales/${saleId}`)
+      .pipe(finalize(() => (this.loadingDetail = false)))
+      .subscribe({
+        next: res => {
+          const sale = res.data;
+          if (!sale) {
+            this.errorMessage = 'Sale not found.';
+            this.editingSaleId = null;
+            this.openList();
+            return;
+          }
+
+          const lines = (sale['lines'] as Array<Record<string, unknown>> | undefined) ?? [];
+          const hasReturns = lines.some(l => Number(l['returnedQuantity'] ?? l['ReturnedQuantity'] ?? 0) > 0);
+          if (hasReturns) {
+            this.editingSaleId = null;
+            void this.dialogs.alert(
+              'This sale has returns, so it cannot be edited. Use Sale Return instead.',
+              { title: 'Cannot edit sale', severity: 'warning' }
+            );
+            this.openList();
+            return;
+          }
+
+          this.showForm = true;
+          this.applySaleToForm(sale);
+        },
+        error: err => {
+          this.editingSaleId = null;
+          this.errorMessage = getApiErrorMessage(err, 'Could not load sale for edit.');
+          this.openList();
+        }
+      });
+  }
+
+  private applySaleToForm(sale: Record<string, unknown>): void {
+    this.editingSaleId = Number(sale['saleId'] ?? this.editingSaleId);
+    this.editingSaleNumber = String(sale['saleNumber'] ?? '');
+    this.editOriginalQtyByProduct.clear();
+    this.showAdvanced = false;
+    this.showSaveConfirm = false;
+    this.activeLineIndex = null;
+    this.productSearch = '';
+    this.productPickerOpen = false;
+    this.taxManuallyEdited = Number(sale['taxAmount'] ?? 0) > 0;
+    this.pendingCustomerName = null;
+
+    const saleDateRaw = String(sale['saleDate'] ?? '');
+    const saleDate = saleDateRaw.includes('T') ? saleDateRaw.slice(0, 10) : saleDateRaw.slice(0, 10) || todayIsoDate();
+
+    this.form.reset({
+      customerId: sale['customerId'] != null ? Number(sale['customerId']) : null,
+      saleDate,
+      locationId: Number(sale['locationId'] ?? this.defaultLocationId),
+      discountAmount: Number(sale['discountAmount'] ?? 0),
+      taxAmount: Number(sale['taxAmount'] ?? 0),
+      remarks: String(sale['remarks'] ?? '')
+    });
+
+    const lines = (sale['lines'] as Array<Record<string, unknown>> | undefined) ?? [];
+    const payments = (sale['payments'] as Array<Record<string, unknown>> | undefined) ?? [];
+
+    this.lines.clear();
+    for (const l of lines) {
+      const productId = Number(l['productId'] ?? l['ProductId'] ?? 0);
+      const productName = String(l['productName'] ?? l['ProductName'] ?? '');
+      const sku = String(l['sku'] ?? l['Sku'] ?? '');
+      const qty = Number(l['quantity'] ?? l['Quantity'] ?? 0);
+      const unitPrice = Number(l['unitPrice'] ?? l['UnitPrice'] ?? 0);
+      if (productId > 0) {
+        const existing = this.productCache.get(productId) ?? this.products.find(x => x.productId === productId);
+        this.productCache.set(productId, {
+          productId,
+          productName: productName || existing?.productName || '',
+          sku: sku || existing?.sku || '',
+          sellingPrice: unitPrice,
+          currentStock: existing?.currentStock ?? 0,
+          shortKey: existing?.shortKey,
+          serialNo: existing?.serialNo
+        });
+        this.editOriginalQtyByProduct.set(
+          productId,
+          (this.editOriginalQtyByProduct.get(productId) ?? 0) + qty
+        );
+      }
+      this.lines.push(
+        this.fb.group({
+          productId: [productId || null],
+          quantity: [qty || 1, [Validators.min(0.0001)]],
+          unitPrice: [unitPrice, [Validators.min(0)]]
+        })
+      );
+    }
+    this.lines.push(this.createLine());
+
+    const paid = Number(sale['paidAmount'] ?? 0);
+    const balance = Number(sale['balanceAmount'] ?? 0);
+    if (paid <= 0) this.paymentMode = 'credit';
+    else if (balance > 0.009) this.paymentMode = 'partial';
+    else this.paymentMode = 'cash';
+
+    this.partialPayAmount = paid;
+    if (payments.length) {
+      this.paymentMethodId = Number(payments[0]['paymentMethodId'] ?? payments[0]['PaymentMethodId'] ?? 1);
+    }
+
+    this.syncPaymentsFromMode();
+    this.refreshStockWarning();
+    setTimeout(() => this.focusCustomerField(), 0);
+  }
+
+  cancel(): void {
+    if (this.editingSaleId) {
+      // Do not pause an edit as a new-sale draft.
+      this.showForm = false;
+      this.editingSaleId = null;
+      this.editingSaleNumber = '';
+      this.editOriginalQtyByProduct.clear();
+      this.openList();
+      return;
+    }
+    this.persistActiveDraft();
+    this.openList();
   }
 
   closeView(): void {
@@ -1516,13 +1772,8 @@ export class SalesComponent implements OnInit, OnDestroy {
     this.openList();
   }
 
-  cancel(): void {
-    this.persistActiveDraft();
-    this.openList();
-  }
-
   async clearAll(): Promise<void> {
-    if (this.saving) return;
+    if (this.saving || this.showSaveConfirm) return;
     if (
       this.filledLineIndices.length > 0 ||
       this.hasDraftContent()
@@ -1534,7 +1785,10 @@ export class SalesComponent implements OnInit, OnDestroy {
       }))) return;
     }
     this.txnHold.clearActiveDraft('sale');
-    this.router.navigate(['/transactions/sales'], { replaceUrl: true });
+    this.editingSaleId = null;
+    this.editingSaleNumber = '';
+    this.editOriginalQtyByProduct.clear();
+    await this.router.navigate(['/transactions/sales'], { replaceUrl: true, queryParams: {} });
     this.resetCreateForm();
   }
 
@@ -1600,9 +1854,9 @@ export class SalesComponent implements OnInit, OnDestroy {
     this.showSaveConfirm = false;
   }
 
-  confirmSave(printReceipt: boolean): void {
+  confirmSave(mode: TxnSaveConfirmMode): void {
     if (this.saving) return;
-    this.performSave(printReceipt === true);
+    this.performSave(mode || 'none');
   }
 
   save(): void {
@@ -1621,8 +1875,13 @@ export class SalesComponent implements OnInit, OnDestroy {
     }
 
     if (this.balanceTotal > 0 && !v.customerId && !this.pendingCustomerName?.trim()) {
-      this.errorMessage = 'Select a customer when there is a balance due.';
-      this.focusCustomerField();
+      // Use dialog directly (not errorMessage/ui-alert) so we control focus after OK/Enter.
+      void this.dialogs
+        .alert('Select a customer when there is a balance due.', {
+          title: 'Customer required',
+          severity: 'warning'
+        })
+        .then(() => this.focusCustomerField());
       return false;
     }
 
@@ -1657,14 +1916,21 @@ export class SalesComponent implements OnInit, OnDestroy {
     return true;
   }
 
-  private finishAfterSave(saleId: number, wantsPrint: boolean, baseMessage: string): void {
-    if (!(saleId > 0 && wantsPrint)) {
+  private finishAfterSave(saleId: number, mode: TxnSaveConfirmMode, baseMessage: string): void {
+    if (!(saleId > 0) || mode === 'none') {
       this.startNewFormAfterSave(baseMessage);
       return;
     }
 
+    if (mode === 'digital') {
+      // PDF preview is the only feedback — no success dialog (avoids double modals).
+      this.startNewFormAfterSave('');
+      this.openDigitalReceiptPreview(saleId);
+      return;
+    }
+
     // Ready for the next sale immediately — thermal print continues in the background.
-    this.startNewFormAfterSave(`${baseMessage} Printing…`);
+    this.startNewFormAfterSave('');
 
     this.saleReceipt.printSaleReceipt(saleId).subscribe({
       next: result => {
@@ -1673,7 +1939,6 @@ export class SalesComponent implements OnInit, OnDestroy {
           return;
         }
 
-        // No thermal config / not supported — open HTML preview as fallback.
         this.message = baseMessage;
         this.errorMessage = result.message || 'Printer unavailable.';
         this.openReceiptPreview(saleId);
@@ -1686,7 +1951,132 @@ export class SalesComponent implements OnInit, OnDestroy {
     });
   }
 
-  private performSave(wantsPrint = false): void {
+  /** Build PDF and show preview modal — user can then Share / Download. */
+  openDigitalReceiptPreview(saleId: number): void {
+    this.closePdfReceiptPreview();
+    this.pdfReceiptLoading = true;
+    this.showPdfReceiptPreview = true;
+
+    this.api
+      .get<Record<string, unknown>>(`/sales/${saleId}`)
+      .pipe(
+        switchMap(saleRes => {
+          const sale = saleRes.data;
+          if (!sale) throw new Error('Sale not found.');
+          return this.api.get<PdfCompanyInfo>('/settings/company').pipe(
+            map(companyRes => ({ sale, company: companyRes.data ?? { companyName: 'Shop' } })),
+            switchMap(ctx =>
+              this.api.get<Array<{ settingKey: string; settingValue: string }>>('/settings/app-settings').pipe(
+                map(settingsRes => {
+                  const footer =
+                    (settingsRes.data ?? []).find(s => s.settingKey === 'InvoiceFooter')?.settingValue ??
+                    'Thank you for your business!';
+                  return { ...ctx, footer };
+                })
+              )
+            )
+          );
+        }),
+        finalize(() => (this.pdfReceiptLoading = false))
+      )
+      .subscribe({
+        next: async ({ sale, company, footer }) => {
+          try {
+            const lines = (sale['lines'] as Array<Record<string, unknown>> | undefined) ?? [];
+            const payments = (sale['payments'] as Array<Record<string, unknown>> | undefined) ?? [];
+            const saleDateRaw = String(sale['saleDate'] ?? '');
+            const saleDate = saleDateRaw ? formatAppDateTime(saleDateRaw) : todayIsoDate();
+            const saleNumber = String(sale['saleNumber'] ?? saleId);
+
+            const blob = await this.pdfDocument.buildSaleReceiptPdf(
+              {
+                companyName: String(company.companyName || 'Shop'),
+                tradeName: company.tradeName,
+                address: company.address,
+                city: company.city,
+                phone: company.phone,
+                email: company.email,
+                currencyCode: company.currencyCode || 'PKR'
+              },
+              {
+                saleNumber,
+                saleDate,
+                customerName: String(sale['customerName'] ?? 'Walk-in'),
+                paymentLabel: payments.length
+                  ? String(payments[0]['paymentMethodName'] ?? payments[0]['PaymentMethodName'] ?? '')
+                  : null,
+                subTotal: Number(sale['subTotal'] ?? 0),
+                discountAmount: Number(sale['discountAmount'] ?? 0),
+                taxAmount: Number(sale['taxAmount'] ?? 0),
+                grandTotal: Number(sale['grandTotal'] ?? 0),
+                paidAmount: Number(sale['paidAmount'] ?? 0),
+                balanceAmount: Number(sale['balanceAmount'] ?? 0),
+                footer,
+                lines: lines.map(l => ({
+                  productName: String(l['productName'] ?? l['ProductName'] ?? 'Item'),
+                  quantity: Number(l['quantity'] ?? l['Quantity'] ?? 0),
+                  unitPrice: Number(l['unitPrice'] ?? l['UnitPrice'] ?? 0),
+                  lineTotal: Number(l['lineTotal'] ?? l['LineTotal'] ?? 0)
+                }))
+              }
+            );
+
+            this.pdfReceiptFilename = `Receipt-${saleNumber}.pdf`;
+            this.pdfReceiptShareText = `Receipt ${saleNumber} — Total ${Number(sale['grandTotal'] ?? 0).toFixed(2)}`;
+            this.pdfReceiptBlob = blob;
+            this.pdfReceiptObjectUrl = URL.createObjectURL(blob);
+            this.pdfReceiptUrl = this.sanitizer.bypassSecurityTrustResourceUrl(this.pdfReceiptObjectUrl);
+          } catch {
+            this.showPdfReceiptPreview = false;
+            this.errorMessage = 'Could not create PDF receipt.';
+          }
+        },
+        error: err => {
+          this.showPdfReceiptPreview = false;
+          this.errorMessage = getApiErrorMessage(err, 'Could not prepare digital receipt.');
+        }
+      });
+  }
+
+  closePdfReceiptPreview(): void {
+    if (this.pdfReceiptObjectUrl) {
+      URL.revokeObjectURL(this.pdfReceiptObjectUrl);
+    }
+    this.showPdfReceiptPreview = false;
+    this.pdfReceiptLoading = false;
+    this.pdfReceiptUrl = null;
+    this.pdfReceiptObjectUrl = null;
+    this.pdfReceiptBlob = null;
+    this.pdfReceiptFilename = '';
+    this.pdfReceiptShareText = '';
+    this.pdfReceiptSharing = false;
+  }
+
+  downloadPdfReceipt(): void {
+    if (!this.pdfReceiptBlob) return;
+    this.pdfShare.downloadPdf(this.pdfReceiptBlob, this.pdfReceiptFilename || 'Receipt.pdf');
+  }
+
+  async sharePdfReceipt(): Promise<void> {
+    if (!this.pdfReceiptBlob || this.pdfReceiptSharing) return;
+    this.pdfReceiptSharing = true;
+    this.cdr.markForCheck();
+    try {
+      await this.pdfShare.sharePdf(
+        this.pdfReceiptBlob,
+        this.pdfReceiptFilename || 'Receipt.pdf',
+        this.pdfReceiptShareText || 'Sale receipt'
+      );
+      // No success toast — preview stays open so user can share again or close.
+    } catch {
+      this.errorMessage = 'Could not share PDF.';
+    } finally {
+      this.pdfReceiptSharing = false;
+      this.cdr.detectChanges();
+    }
+  }
+
+  private performSave(mode: TxnSaveConfirmMode = 'none'): void {
     if (this.saving) return;
 
     const v = this.form.getRawValue();
@@ -1701,8 +2091,10 @@ export class SalesComponent implements OnInit, OnDestroy {
       .filter(l => l.productId > 0 && l.quantity > 0);
 
     this.saving = true;
-    this.message = wantsPrint ? 'Saving & printing…' : '';
+    // Do not set this.message for print/digital progress — app-ui-alert opens a modal dialog.
+    this.message = '';
     this.errorMessage = '';
+    const editingId = this.editingSaleId;
 
     const pendingName = this.pendingCustomerName?.trim() || '';
     const resolveCustomerId$ = pendingName
@@ -1723,6 +2115,7 @@ export class SalesComponent implements OnInit, OnDestroy {
           }
 
           const body = {
+            saleId: editingId ?? 0,
             customerId,
             saleDate: v.saleDate,
             locationId: this.resolveLocationId(v.locationId)!,
@@ -1736,6 +2129,9 @@ export class SalesComponent implements OnInit, OnDestroy {
               : null
           };
 
+          if (editingId) {
+            return this.api.put<number>(`/sales/${editingId}`, body);
+          }
           return this.api.post<number>('/sales', body);
         }),
         finalize(() => (this.saving = false))
@@ -1744,15 +2140,22 @@ export class SalesComponent implements OnInit, OnDestroy {
         next: res => {
           this.showSaveConfirm = false;
           this.saveWithPrint = false;
-          // Drop sold qty from cached catalog so the next sale sees fresh stock immediately.
-          this.applySoldStock(lines);
           const saleId = Number(res.data);
-          this.finishAfterSave(saleId, wantsPrint, 'Sale saved successfully.');
+          if (editingId) {
+            this.applyNetSoldStock(this.editOriginalQtyByProduct, lines);
+          } else {
+            this.applySoldStock(lines);
+          }
+          this.finishAfterSave(
+            saleId,
+            mode,
+            editingId ? 'Sale updated successfully.' : 'Sale saved successfully.'
+          );
         },
         error: err => {
           this.showSaveConfirm = false;
           this.saveWithPrint = false;
-          this.errorMessage = getApiErrorMessage(err, 'Save failed.');
+          this.errorMessage = getApiErrorMessage(err, editingId ? 'Update failed.' : 'Save failed.');
         }
       });
   }
@@ -1769,28 +2172,48 @@ export class SalesComponent implements OnInit, OnDestroy {
 
   /** Update POS product cache after a successful sale (prevents stale Avl / stock checks). */
   private applySoldStock(lines: Array<{ productId: number; quantity: number }>): void {
-    if (!lines.length) return;
-
     const sold = new Map<number, number>();
     for (const line of lines) {
       sold.set(line.productId, (sold.get(line.productId) ?? 0) + Number(line.quantity || 0));
     }
+    this.applyStockDelta(sold);
+  }
+
+  /** After edit: stock change is (new qty − original qty) per product. */
+  private applyNetSoldStock(
+    previousQty: Map<number, number>,
+    newLines: Array<{ productId: number; quantity: number }>
+  ): void {
+    const net = new Map<number, number>();
+    for (const [id, qty] of previousQty) {
+      net.set(id, -(qty || 0));
+    }
+    for (const line of newLines) {
+      net.set(line.productId, (net.get(line.productId) ?? 0) + Number(line.quantity || 0));
+    }
+    this.applyStockDelta(net);
+  }
+
+  /** Positive delta = stock decreases; negative = stock increases. */
+  private applyStockDelta(deltaByProduct: Map<number, number>): void {
+    if (!deltaByProduct.size) return;
 
     this.products = this.products.map(p => {
-      const qty = sold.get(p.productId);
-      if (!qty) return p;
+      const d = deltaByProduct.get(p.productId);
+      if (!d) return p;
       return {
         ...p,
-        currentStock: Math.max(0, Number(p.currentStock || 0) - qty)
+        currentStock: Math.max(0, Number(p.currentStock || 0) - d)
       };
     });
 
-    for (const [productId, qty] of sold) {
+    for (const [productId, d] of deltaByProduct) {
+      if (!d) continue;
       const cached = this.productCache.get(productId);
       if (!cached) continue;
       this.productCache.set(productId, {
         ...cached,
-        currentStock: Math.max(0, Number(cached.currentStock || 0) - qty)
+        currentStock: Math.max(0, Number(cached.currentStock || 0) - d)
       });
     }
   }

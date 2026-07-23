@@ -1,7 +1,10 @@
-<nav class="list-pagination" *ngIf="pagination.totalCount > 0" aria-label="Table pagination">
-  <div class="list-pagination__info">
+<nav class="list-pagination" aria-label="Table pagination">
+  <div class="list-pagination__info" *ngIf="pagination.totalCount > 0">
     Showing <strong>{{ pagination.rangeStart }}–{{ pagination.rangeEnd }}</strong> of
     <strong>{{ pagination.totalCount }}</strong>
+  </div>
+  <div class="list-pagination__info" *ngIf="pagination.totalCount === 0">
+    No records
   </div>
 
   <div class="list-pagination__controls" *ngIf="pagination.totalPages > 1">

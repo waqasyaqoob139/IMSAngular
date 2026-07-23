@@ -41,7 +41,7 @@
           #saveBtn
           type="button"
           class="btn btn-success"
-          (click)="emitConfirm(false)"
+          (click)="emitConfirm('none')"
           [disabled]="saving">
           {{ saving ? 'Saving...' : saveLabel }}
         </button>
@@ -49,9 +49,19 @@
           #savePrintBtn
           type="button"
           class="btn btn-outline-success"
-          (click)="emitConfirm(true)"
-          [disabled]="saving">
+          (click)="emitConfirm('print')"
+          [disabled]="saving"
+          title="Print on thermal printer">
           {{ saving ? 'Saving...' : saveWithPrintLabel }}
+        </button>
+        <button
+          #saveDigitalBtn
+          type="button"
+          class="btn btn-outline-primary"
+          (click)="emitConfirm('digital')"
+          [disabled]="saving"
+          title="Create PDF and share (WhatsApp)">
+          {{ saving ? 'Saving...' : saveWithDigitalLabel }}
         </button>
       </ng-container>
       <ng-template #simpleSave>
@@ -59,7 +69,7 @@
           #saveBtn
           type="button"
           class="btn btn-success"
-          (click)="emitConfirm(false)"
+          (click)="emitConfirm('none')"
           [disabled]="saving">
           {{ saving ? 'Saving...' : saveLabel }}
         </button>

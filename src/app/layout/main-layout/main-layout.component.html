@@ -20,10 +20,6 @@
         [class.nav-menus-locked]="navMenusLocked"
         (click)="onNavMenuClick($event)"
         (mouseleave)="navMenusLocked = false">
-        <li class="nav-item" *ngIf="can(p.dashboard)">
-          <a class="nav-link" routerLink="/dashboard" routerLinkActive="active">Dashboard</a>
-        </li>
-
         <li class="nav-item dropdown" *ngIf="hasSetupMenu()">
           <button type="button" class="nav-link dropdown-toggle"
             [class.show]="mobileOpenSection === 'setup'"
@@ -114,39 +110,6 @@
 
       <div class="txn-pause-chip" *ngIf="txnPauseHint" [title]="txnPauseHint">
         {{ txnPauseHint }}
-      </div>
-
-      <div class="navbar-search me-3" (mouseleave)="searchOpen = false">
-        <input
-          class="form-control form-control-sm global-search-input"
-          aria-label="Search products, customers, suppliers and invoices"
-          placeholder="Search products, invoices..."
-          [(ngModel)]="searchTerm"
-          (keyup.enter)="onSearch()"
-          (input)="onSearch()" />
-        <div class="search-dropdown" *ngIf="searchOpen && searchResult">
-          <div *ngIf="searchResult.products.length">
-            <div class="search-group-label">Products</div>
-            <button type="button" class="search-item" *ngFor="let p of searchResult.products" (click)="goProduct(p.id)">{{ p.name }}</button>
-          </div>
-          <div *ngIf="searchResult.customers.length">
-            <div class="search-group-label">Customers</div>
-            <button type="button" class="search-item" *ngFor="let c of searchResult.customers" (click)="goCustomer(c.id)">{{ c.name }}</button>
-          </div>
-          <div *ngIf="searchResult.suppliers.length">
-            <div class="search-group-label">Suppliers</div>
-            <button type="button" class="search-item" *ngFor="let s of searchResult.suppliers" (click)="goSupplier(s.id)">{{ s.name }}</button>
-          </div>
-          <div *ngIf="searchResult.documents.length">
-            <div class="search-group-label">Documents</div>
-            <button type="button" class="search-item" *ngFor="let d of searchResult.documents" (click)="goDocument(d)">
-              {{ d.number }} — {{ d.title }}
-            </button>
-          </div>
-          <div class="search-empty" *ngIf="!searchResult.products.length && !searchResult.customers.length && !searchResult.suppliers.length && !searchResult.documents.length">
-            No results
-          </div>
-        </div>
       </div>
 
       <div class="navbar-user">

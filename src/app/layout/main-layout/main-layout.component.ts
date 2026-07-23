@@ -2,18 +2,10 @@ import { ChangeDetectorRef, Component, HostListener, OnDestroy, OnInit } from '@
 import { NavigationEnd, Router } from '@angular/router';
 import { filter, Subscription } from 'rxjs';
 import { AuthService } from '../../core/services/auth.service';
-import { ApiService } from '../../core/services/api.service';
 import { CompanyBrandingService } from '../../core/services/company-branding.service';
 import { TxnHoldService } from '../../core/services/txn-hold.service';
 import { shouldBlockPageShortcut } from '../../core/utils/txn-keyboard';
 import { PERMISSIONS } from '../../core/models/permissions';
-
-interface SearchResult {
-  products: Array<{ id: number; name: string }>;
-  customers: Array<{ id: number; name: string }>;
-  suppliers: Array<{ id: number; name: string }>;
-  documents: Array<{ type: string; id: number; number: string; title: string; amount?: number }>;
-}
 
 @Component({
   selector: 'app-main-layout',
@@ -22,9 +14,6 @@ interface SearchResult {
   standalone: false
 })
 export class MainLayoutComponent implements OnInit, OnDestroy {
-  searchTerm = '';
-  searchOpen = false;
-  searchResult: SearchResult | null = null;
   /** After clicking a menu link, keep hover menus closed until the pointer leaves the nav. */
   navMenusLocked = false;
   mobileMenuOpen = false;
@@ -35,7 +24,6 @@ export class MainLayoutComponent implements OnInit, OnDestroy {
   constructor(
     private auth: AuthService,
     private router: Router,
-    private api: ApiService,
     private txnHold: TxnHoldService,
     private cdr: ChangeDetectorRef,
     readonly branding: CompanyBrandingService
@@ -74,14 +62,12 @@ export class MainLayoutComponent implements OnInit, OnDestroy {
     this.mobileMenuOpen = !this.mobileMenuOpen;
     if (!this.mobileMenuOpen) this.mobileOpenSection = null;
     document.body.classList.toggle('ims-mobile-menu-open', this.mobileMenuOpen);
-    if (!this.mobileMenuOpen) this.closeSearch();
   }
 
   closeMobileMenu(): void {
     this.mobileMenuOpen = false;
     this.mobileOpenSection = null;
     document.body.classList.remove('ims-mobile-menu-open');
-    this.closeSearch();
   }
 
   toggleMobileSection(section: string, event: Event): void {
@@ -184,57 +170,5 @@ export class MainLayoutComponent implements OnInit, OnDestroy {
 
   logout(): void {
     this.auth.logout();
-  }
-
-  onSearch(): void {
-    const term = this.searchTerm.trim();
-    if (term.length < 2) {
-      this.searchResult = null;
-      this.searchOpen = false;
-      return;
-    }
-
-    this.api.get<SearchResult>('/lookups/search', { term }).subscribe({
-      next: res => {
-        this.searchResult = res.data ?? null;
-        this.searchOpen = true;
-      }
-    });
-  }
-
-  goProduct(id: number): void {
-    this.closeSearch();
-    this.router.navigate(['/masters/products'], { queryParams: { id } });
-  }
-
-  goCustomer(id: number): void {
-    this.closeSearch();
-    this.router.navigate(['/masters/customers'], { queryParams: { id } });
-  }
-
-  goSupplier(id: number): void {
-    this.closeSearch();
-    this.router.navigate(['/masters/suppliers'], { queryParams: { id } });
-  }
-
-  goDocument(doc: { type: string; id: number }): void {
-    this.closeSearch();
-    const routes: Record<string, string> = {
-      SALE: '/transactions/sales',
-      PURCHASE: '/transactions/purchases',
-      CUSTOMER_PAYMENT: '/transactions/customer-payments',
-      SUPPLIER_PAYMENT: '/transactions/supplier-payments',
-      EXPENSE: '/transactions/expenses',
-      SALE_RETURN: '/transactions/sale-returns',
-      PURCHASE_RETURN: '/transactions/purchase-returns'
-    };
-    const path = routes[doc.type];
-    if (path) this.router.navigate([path], { queryParams: { id: doc.id } });
-  }
-
-  closeSearch(): void {
-    this.searchOpen = false;
-    this.searchTerm = '';
-    this.searchResult = null;
   }
 }

@@ -4,7 +4,12 @@
       <h4>Ledgers</h4>
       <p class="hint-text mb-0">Customer, supplier and product account views</p>
     </div>
+    <div class="page-header-actions">
+      <button type="button" class="btn btn-outline-primary btn-sm" (click)="exportPdf(false)" [disabled]="loading || exporting || !rows.length">PDF</button>
+      <button type="button" class="btn btn-primary btn-sm" (click)="exportPdf(true)" [disabled]="loading || exporting || !rows.length" title="Share PDF (WhatsApp)">Share</button>
+    </div>
   </div>
+  <div *ngIf="exportMessage" class="alert alert-success py-2">{{ exportMessage }}</div>
   <div class="content-panel">
     <div class="toolbar">
       <app-searchable-select [(ngModel)]="ledgerType" [items]="ledgerTypeOptions"

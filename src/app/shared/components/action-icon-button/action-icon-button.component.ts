@@ -2,7 +2,7 @@ import { CommonModule } from '@angular/common';
 import { Component, EventEmitter, HostBinding, Input, Output } from '@angular/core';
 import { Params, RouterLink } from '@angular/router';
 
-export type ActionIcon = 'view' | 'edit' | 'delete' | 'print' | 'remove';
+export type ActionIcon = 'view' | 'edit' | 'delete' | 'print' | 'remove' | 'share' | 'pdf';
 export type ActionIconVariant = 'primary' | 'danger' | 'secondary' | 'success';
 
 @Component({

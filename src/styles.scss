@@ -89,6 +89,44 @@ h4 {
   padding: 0.5rem 0.75rem;
 }
 
+/* Non-blocking success strip (avoids success dialog modals) */
+.txn-inline-alert {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+  padding: 0.45rem 0.75rem;
+  border-radius: var(--ims-radius);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.txn-inline-alert--success {
+  color: #166534;
+  background: #dcfce7;
+  border: 1px solid #86efac;
+}
+
+.txn-inline-alert__close {
+  flex-shrink: 0;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  border: 0;
+  border-radius: 0.35rem;
+  background: transparent;
+  color: inherit;
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+
+  &:hover {
+    background: rgba(0, 0, 0, 0.06);
+  }
+}
+
 .page-header {
   display: flex;
   justify-content: space-between;
@@ -1166,18 +1204,20 @@ app-searchable-select.searchable-select--wide {
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.03em;
-    padding: 0.35rem 0.625rem;
+    padding: 0.28rem 0.55rem;
     border: 1px solid var(--ims-border);
     border-bottom: 2px solid var(--ims-primary);
     white-space: nowrap;
+    line-height: 1.2;
   }
 
   tbody td {
-    padding: 0.25rem 0.625rem;
+    padding: 0.2rem 0.55rem;
     border: 1px solid var(--ims-border);
     color: var(--ims-text);
     vertical-align: middle;
     background: var(--ims-surface);
+    line-height: 1.2;
   }
 
   tbody tr:nth-child(even) td {
@@ -1191,7 +1231,58 @@ app-searchable-select.searchable-select--wide {
   .col-actions {
     text-align: right;
     white-space: nowrap;
+    width: 1%;
   }
+
+  .badge {
+    font-size: 0.625rem;
+    font-weight: 600;
+    padding: 0.12em 0.4em;
+    line-height: 1.15;
+    vertical-align: middle;
+  }
+
+  .action-icon-button {
+    width: 1.5rem;
+    height: 1.5rem;
+    border-radius: 0.35rem;
+    vertical-align: middle;
+
+    svg {
+      width: 0.8125rem;
+      height: 0.8125rem;
+    }
+  }
+
+  app-action-icon-button {
+    display: inline-block;
+    vertical-align: middle;
+    line-height: 0;
+  }
+
+  strong {
+    font-weight: 600;
+  }
+}
+
+/* Same row height on every listing page (exclude POS line grids).
+   Table-cell height acts as a minimum, so form-line tables can still grow. */
+.data-table:not(.lines-grid):not(.adjustment-lines-table) tbody tr:not(.empty-row) td {
+  height: 2rem;
+  box-sizing: border-box;
+  padding-top: 0;
+  padding-bottom: 0;
+  padding-left: 0.55rem;
+  padding-right: 0.55rem;
+}
+
+.data-table:not(.lines-grid):not(.adjustment-lines-table) thead th {
+  height: 2rem;
+  box-sizing: border-box;
+  padding-top: 0;
+  padding-bottom: 0;
+  padding-left: 0.55rem;
+  padding-right: 0.55rem;
 }
 
 .empty-row td {

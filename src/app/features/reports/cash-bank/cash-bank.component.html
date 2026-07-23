@@ -4,7 +4,12 @@
       <h4>Cash &amp; Bank</h4>
       <p class="hint-text mb-0">Account balances and cash/bank books</p>
     </div>
+    <div class="page-header-actions">
+      <button type="button" class="btn btn-outline-primary btn-sm" (click)="exportPdf(false)" [disabled]="loading || exporting || !rows.length">PDF</button>
+      <button type="button" class="btn btn-primary btn-sm" (click)="exportPdf(true)" [disabled]="loading || exporting || !rows.length" title="Share PDF (WhatsApp)">Share</button>
+    </div>
   </div>
+  <div *ngIf="exportMessage" class="alert alert-success py-2">{{ exportMessage }}</div>
 
   <div class="row g-3 mb-3">
     <div class="col-md-4" *ngFor="let a of accounts">

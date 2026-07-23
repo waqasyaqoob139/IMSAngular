@@ -1,7 +1,17 @@
 import { Injectable } from '@angular/core';
+import { PdfCompanyInfo, PdfDocumentService, PdfReportColumn } from './pdf-document.service';
+import { PdfShareService, SharePdfResult } from './pdf-share.service';
+import { ApiService } from './api.service';
+import { firstValueFrom } from 'rxjs';
 
 @Injectable({ providedIn: 'root' })
 export class ExportPrintService {
+  constructor(
+    private pdfDocument: PdfDocumentService,
+    private pdfShare: PdfShareService,
+    private api: ApiService
+  ) {}
+
   exportCsv(filename: string, headers: string[], rows: Array<Array<string | number>>): void {
     const escape = (v: string | number) => {
       const s = String(v ?? '');
@@ -41,5 +51,42 @@ export class ExportPrintService {
     const head = `<thead><tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr></thead>`;
     const body = `<tbody>${rows.map(r => `<tr>${r.map(c => `<td>${c}</td>`).join('')}</tr>`).join('')}</tbody>`;
     this.printHtml(title, `<table>${head}${body}</table>`, footer);
+  }
+
+  async exportReportPdf(options: {
+    title: string;
+    subtitle?: string;
+    columns: PdfReportColumn[];
+    rows: Array<Array<string | number>>;
+    summaryLines?: Array<{ label: string; value: string }>;
+    filename: string;
+    share?: boolean;
+  }): Promise<SharePdfResult | 'empty'> {
+    if (!options.rows.length) return 'empty';
+
+    let company: PdfCompanyInfo | null = null;
+    try {
+      const res = await firstValueFrom(this.api.get<PdfCompanyInfo>('/settings/company'));
+      company = res.data ?? null;
+    } catch {
+      company = null;
+    }
+
+    const blob = await this.pdfDocument.buildReportPdf({
+      title: options.title,
+      subtitle: options.subtitle,
+      company,
+      columns: options.columns,
+      rows: options.rows,
+      summaryLines: options.summaryLines,
+      filename: options.filename
+    });
+
+    if (options.share) {
+      return this.pdfShare.sharePdf(blob, options.filename, `${options.title} PDF`);
+    }
+
+    this.pdfShare.downloadPdf(blob, options.filename);
+    return 'downloaded';
   }
 }

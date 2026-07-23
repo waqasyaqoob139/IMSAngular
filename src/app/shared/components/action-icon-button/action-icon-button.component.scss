@@ -67,3 +67,15 @@
     background: #15803d;
   }
 }
+
+/* Compact listing tables — readable size, not tiny */
+:host-context(.data-table) .action-icon-button {
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 0.35rem;
+
+  svg {
+    width: 0.8125rem;
+    height: 0.8125rem;
+  }
+}

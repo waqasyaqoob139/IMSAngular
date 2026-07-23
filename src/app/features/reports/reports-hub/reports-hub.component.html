@@ -1,10 +1,19 @@
 <div class="page-shell">
-  <div class="page-header">
+    <div class="page-header">
     <div>
       <h4>Reports</h4>
       <p class="hint-text mb-0">Net figures exclude sale/purchase returns in the selected period (same as dashboard &amp; profit tab)</p>
     </div>
+    <div class="page-header-actions">
+      <button type="button" class="btn btn-outline-primary btn-sm" (click)="exportActivePdf(false)" [disabled]="loading || exporting">
+        {{ exporting ? '…' : 'PDF' }}
+      </button>
+      <button type="button" class="btn btn-primary btn-sm" (click)="exportActivePdf(true)" [disabled]="loading || exporting" title="Share PDF (WhatsApp)">
+        Share
+      </button>
+    </div>
   </div>
+  <div *ngIf="exportMessage" class="alert alert-success py-2">{{ exportMessage }}</div>
 
   <div class="content-panel">
     <ul class="nav nav-tabs mb-3">

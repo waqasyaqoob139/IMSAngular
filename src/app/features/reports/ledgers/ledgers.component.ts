@@ -1,10 +1,12 @@
 import { Component, OnInit } from '@angular/core';
 import { finalize } from 'rxjs';
 import { ApiService } from '../../../core/services/api.service';
+import { ExportPrintService } from '../../../core/services/export-print.service';
 import { LookupsService } from '../../../core/services/lookups.service';
 import { PaginatedList } from '../../../core/models/api.models';
 import { ListPagination } from '../../../core/utils/list-pagination';
 import { mapNamedOptions, SearchableSelectOption } from '../../../shared/components/searchable-select/searchable-select.models';
+import { formatAppDate } from '../../../core/utils/date-format';
 
 interface PartyOption {
   id: number;
@@ -35,6 +37,8 @@ export class LedgersComponent implements OnInit {
   toDate = '';
   loading = false;
   rows: LedgerRow[] = [];
+  exportMessage = '';
+  exporting = false;
 
   readonly ledgerTypeOptions: SearchableSelectOption[] = [
     { value: 'customer', label: 'Customer Ledger' },
@@ -50,7 +54,8 @@ export class LedgersComponent implements OnInit {
 
   constructor(
     private api: ApiService,
-    private lookupsService: LookupsService
+    private lookupsService: LookupsService,
+    private exportPrint: ExportPrintService
   ) {}
 
   ngOnInit(): void {
@@ -98,6 +103,59 @@ export class LedgersComponent implements OnInit {
     this.rows = [];
     if (this.ledgerType === 'product') {
       this.ensureProductsLoaded();
+    }
+  }
+
+  async exportPdf(share = false): Promise<void> {
+    if (this.exporting || !this.rows.length) {
+      this.exportMessage = this.rows.length ? '' : 'No rows to export.';
+      return;
+    }
+    this.exporting = true;
+    this.exportMessage = '';
+    const partyName =
+      this.partySelectOptions.find(o => o.value === this.partyId)?.label || 'Party';
+    const title =
+      this.ledgerType === 'customer'
+        ? 'Customer Ledger'
+        : this.ledgerType === 'supplier'
+          ? 'Supplier Ledger'
+          : 'Product Ledger';
+    try {
+      const result = await this.exportPrint.exportReportPdf({
+        title,
+        subtitle: `${partyName}${this.fromDate || this.toDate ? ` · ${formatAppDate(this.fromDate) || '…'} – ${formatAppDate(this.toDate) || '…'}` : ''}`,
+        filename: `${title.replace(/\s+/g, '-')}-${partyName}.pdf`,
+        share,
+        columns: [
+          { header: 'Date' },
+          { header: 'Reference' },
+          { header: 'Description' },
+          { header: 'Debit', align: 'right' },
+          { header: 'Credit', align: 'right' },
+          { header: 'Balance', align: 'right' }
+        ],
+        rows: this.rows.map(r => [
+          formatAppDate(r.entryDate),
+          r.reference,
+          r.description,
+          Number(r.debit).toFixed(2),
+          Number(r.credit).toFixed(2),
+          Number(r.balance).toFixed(2)
+        ])
+      });
+      this.exportMessage =
+        result === 'shared'
+          ? 'PDF shared.'
+          : result === 'downloaded'
+            ? share
+              ? 'PDF downloaded — open WhatsApp to send it.'
+              : 'PDF downloaded.'
+            : result === 'cancelled'
+              ? 'Share cancelled.'
+              : 'Could not export.';
+    } finally {
+      this.exporting = false;
     }
   }
 }

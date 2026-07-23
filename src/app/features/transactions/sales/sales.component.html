@@ -1,5 +1,8 @@
 <div class="page-shell" appPageNewShortcut [pageNewShortcutActive]="!saving && !showSaveConfirm" (pageNewShortcut)="startNew()">
-  <app-ui-alert [message]="message" severity="success" (dismissed)="message = ''" />
+  <div class="txn-inline-alert txn-inline-alert--success" *ngIf="message" role="status">
+    <span>{{ message }}</span>
+    <button type="button" class="txn-inline-alert__close" (click)="message = ''" aria-label="Dismiss">×</button>
+  </div>
   <app-ui-alert [message]="errorMessage" severity="danger" (dismissed)="errorMessage = ''" />
 
   <!-- List -->
@@ -56,6 +59,7 @@
               <td>{{ s.createdByUsername || '—' }}</td>
               <td class="col-actions">
                 <app-action-icon-button icon="view" label="View sale" (activated)="openView(s)" />
+                <app-action-icon-button class="ms-1" icon="edit" label="Edit sale" (activated)="openEdit(s)" />
               </td>
             </tr>
           </tbody>
@@ -77,6 +81,10 @@
         <button type="button" class="txn-list-link" (click)="closeView()">← Back</button>
         <span class="toolbar-title">Sale {{ viewDetail?.['saleNumber'] || '...' }}</span>
         <div class="toolbar-actions">
+          <app-action-icon-button icon="edit" variant="secondary" label="Edit sale"
+            (activated)="openEditFromView()" *ngIf="viewDetail" />
+          <app-action-icon-button icon="share" variant="primary" label="Share PDF / WhatsApp"
+            (activated)="shareViewDigital()" *ngIf="viewDetail" />
           <app-action-icon-button icon="print" variant="secondary" label="Print sale"
             (activated)="printView()" *ngIf="viewDetail" />
         </div>
@@ -151,15 +159,16 @@
       (txnSave)="requestSave()" (txnCancel)="cancel()">
       <app-txn-save-confirm
         [open]="showSaveConfirm"
-        title="Save this sale?"
+        [title]="editingSaleId ? 'Update this sale?' : 'Save this sale?'"
         [itemCount]="filledLineIndices.length"
         [grandTotal]="grandTotal"
         [partyLabel]="saveConfirmPartyLabel"
         [paymentSummary]="saveConfirmPaymentSummary"
         [saving]="saving"
         [printChoice]="true"
-        saveLabel="Sale"
-        saveWithPrintLabel="Sale & Print"
+        [saveLabel]="editingSaleId ? 'Update' : 'Sale'"
+        [saveWithPrintLabel]="editingSaleId ? 'Update & Print' : 'Sale & Print'"
+        [saveWithDigitalLabel]="editingSaleId ? 'Update & Digital' : 'Sale & Digital'"
         (confirmed)="confirmSave($event)"
         (cancelled)="cancelSaveConfirm()">
       </app-txn-save-confirm>
@@ -169,8 +178,8 @@
             <div class="section-card__head">
               <div class="txn-head">
                 <div class="txn-head__left">
-                  <span class="txn-head__type">Sale</span>
-                  <span class="pos-draft-chip" *ngIf="oppositeDraftHint">{{ oppositeDraftHint }}</span>
+                  <span class="txn-head__type">{{ editingSaleId ? ('Edit Sale ' + editingSaleNumber) : 'Sale' }}</span>
+                  <span class="pos-draft-chip" *ngIf="!editingSaleId && oppositeDraftHint">{{ oppositeDraftHint }}</span>
                 </div>
                 <button type="button" class="btn btn-outline-secondary btn-sm" (click)="openList()" [disabled]="saving">Sales List</button>
               </div>
@@ -466,7 +475,7 @@
                 (click)="requestSave()"
                 [disabled]="!canSaveSale"
                 [title]="hasInsufficientStock ? 'Fix stock shortage first' : 'Save (Ctrl+S)'">
-                {{ saving ? 'Saving...' : (hasInsufficientStock ? 'Cannot save — stock short' : 'Save Sale') }}
+                {{ saving ? 'Saving...' : (hasInsufficientStock ? 'Cannot save — stock short' : (editingSaleId ? 'Update Sale' : 'Save Sale')) }}
               </button>
               <button class="btn btn-secondary w-100" type="button" (click)="cancel()" [disabled]="saving" title="Back to list (Esc)">Cancel</button>
               <button class="btn btn-outline-danger w-100" type="button" (click)="clearAll()" [disabled]="saving">Clear All</button>
@@ -511,6 +520,49 @@
           (click)="printReceiptPreview()"
           [disabled]="receiptPreviewLoading || !receiptPreviewSafeHtml">
           Print
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="receipt-preview" *ngIf="showPdfReceiptPreview" (keydown.escape)="closePdfReceiptPreview()">
+    <div class="receipt-preview__backdrop" (click)="closePdfReceiptPreview()"></div>
+    <div
+      class="receipt-preview__panel receipt-preview__panel--pdf"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="pdf-receipt-preview-title"
+      (click)="$event.stopPropagation()">
+      <div class="receipt-preview__head">
+        <h6 id="pdf-receipt-preview-title" class="receipt-preview__title">Digital receipt ready</h6>
+        <p class="receipt-preview__lead">Saved successfully. Preview the PDF, then download or share to WhatsApp.</p>
+      </div>
+
+      <div class="receipt-preview__body receipt-preview__body--pdf">
+        <div *ngIf="pdfReceiptLoading" class="receipt-preview__loading">Preparing PDF…</div>
+        <iframe
+          *ngIf="pdfReceiptUrl && !pdfReceiptLoading"
+          class="receipt-preview__frame receipt-preview__frame--pdf"
+          title="Digital receipt PDF"
+          [src]="pdfReceiptUrl">
+        </iframe>
+      </div>
+
+      <div class="receipt-preview__actions">
+        <button type="button" class="btn btn-secondary" (click)="closePdfReceiptPreview()">Close</button>
+        <button
+          type="button"
+          class="btn btn-secondary"
+          (click)="downloadPdfReceipt()"
+          [disabled]="pdfReceiptLoading || !pdfReceiptBlob">
+          Download
+        </button>
+        <button
+          type="button"
+          class="btn btn-primary"
+          (click)="sharePdfReceipt()"
+          [disabled]="pdfReceiptLoading || !pdfReceiptBlob || pdfReceiptSharing">
+          {{ pdfReceiptSharing ? 'Sharing…' : 'Share' }}
         </button>
       </div>
     </div>

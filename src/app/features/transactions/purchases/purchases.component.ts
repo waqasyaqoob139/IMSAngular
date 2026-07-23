@@ -1,7 +1,8 @@
-import { Component, ElementRef, HostListener, OnDestroy, OnInit, ViewChild } from '@angular/core';
+import { ChangeDetectorRef, Component, ElementRef, HostListener, OnDestroy, OnInit, ViewChild } from '@angular/core';
+import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { FormArray, FormBuilder, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
-import { finalize, switchMap, of, map, Subject, debounceTime, distinctUntilChanged, takeUntil } from 'rxjs';
+import { finalize, switchMap, of, map, Subject, debounceTime, distinctUntilChanged, takeUntil, forkJoin, catchError } from 'rxjs';
 import { ApiService } from '../../../core/services/api.service';
 import { UiDialogService } from '../../../core/services/ui-dialog.service';
 import {
@@ -10,6 +11,8 @@ import {
   TxnHoldService
 } from '../../../core/services/txn-hold.service';
 import { LookupsService } from '../../../core/services/lookups.service';
+import { PdfDocumentService, PdfCompanyInfo } from '../../../core/services/pdf-document.service';
+import { PdfShareService } from '../../../core/services/pdf-share.service';
 import { getApiErrorMessage, PaginatedList } from '../../../core/models/api.models';
 import {
   adjacentPaymentMode,
@@ -26,7 +29,8 @@ import {
 } from '../../../core/utils/txn-keyboard';
 import { mapNamedOptions, SearchableSelectOption } from '../../../shared/components/searchable-select/searchable-select.models';
 import { TxnBrowseProduct } from '../shared/txn-product-browse.component';
-import { todayIsoDate } from '../../../core/utils/date-format';
+import { TxnSaveConfirmMode } from '../shared/txn-save-confirm.component';
+import { formatAppDateTime, todayIsoDate } from '../../../core/utils/date-format';
 import { ListPagination } from '../../../core/utils/list-pagination';
 import { resolveTxnPaymentStatus, txnPaymentStatusLabel } from '../../../core/utils/txn-payment-status';
 import {
@@ -89,10 +93,26 @@ export class PurchasesComponent implements OnInit, OnDestroy {
   activeLineIndex: number | null = null;
   viewId: number | null = null;
   viewDetail: Record<string, unknown> | null = null;
+  /** When set, form is editing an existing posted purchase (reverse+repost on save). */
+  editingPurchaseId: number | null = null;
+  editingPurchaseNumber = '';
+  private editingSupplierInvoiceNo: string | null = null;
+  editingHadAttachment = false;
   documentFile: File | null = null;
   viewDocumentUrl: string | null = null;
   viewDocumentIsImage = false;
   loadingDocument = false;
+
+  /** Digital PDF purchase invoice preview. */
+  showPdfReceiptPreview = false;
+  pdfReceiptLoading = false;
+  pdfReceiptSharing = false;
+  pdfReceiptUrl: SafeResourceUrl | null = null;
+  private pdfReceiptObjectUrl: string | null = null;
+  pdfReceiptBlob: Blob | null = null;
+  pdfReceiptFilename = '';
+  pdfReceiptShareText = '';
+  private pdfReceiptAutoPrint = false;
 
   paymentMode: PaymentMode = 'credit';
   partialPayAmount = 0;
@@ -138,7 +158,11 @@ export class PurchasesComponent implements OnInit, OnDestroy {
     private router: Router,
     private txnHold: TxnHoldService,
     private lookupsService: LookupsService,
-    private dialogs: UiDialogService
+    private dialogs: UiDialogService,
+    private pdfDocument: PdfDocumentService,
+    private pdfShare: PdfShareService,
+    private sanitizer: DomSanitizer,
+    private cdr: ChangeDetectorRef
   ) {
     this.form = this.fb.group({
       supplierId: [null as number | null],
@@ -168,6 +192,7 @@ export class PurchasesComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.persistActiveDraft();
     this.clearViewDocument();
+    this.closePdfReceiptPreview();
     this.destroy$.next();
     this.destroy$.complete();
   }
@@ -222,14 +247,28 @@ export class PurchasesComponent implements OnInit, OnDestroy {
   }
 
   private persistActiveDraft(): void {
-    if (!this.showForm || this.saving) return;
+    if (!this.showForm || this.saving || this.editingPurchaseId) return;
     if (!this.hasDraftContent()) {
       this.txnHold.clearActiveDraft('purchase');
       return;
     }
 
     const v = this.form.getRawValue() as PurchaseHoldFormValue;
-    const lines = (v.lines ?? []).filter(l => !!l.productId && Number(l.quantity) > 0);
+    const lines = (v.lines ?? [])
+      .filter(l => !!l.productId && Number(l.quantity) > 0)
+      .map(l => {
+        const productId = Number(l.productId);
+        const p = this.productCache.get(productId) ?? this.products.find(x => x.productId === productId);
+        return {
+          ...l,
+          productId,
+          productName: p?.productName ?? l.productName,
+          sku: p?.sku ?? l.sku,
+          currentStock: p?.currentStock ?? l.currentStock,
+          shortKey: p?.shortKey ?? l.shortKey,
+          serialNo: p?.serialNo ?? l.serialNo
+        };
+      });
     const supplierName = this.pendingSupplierName?.trim()
       || this.suppliers.find(s => s.id === Number(v.supplierId))?.name
       || 'No supplier';
@@ -291,7 +330,11 @@ export class PurchasesComponent implements OnInit, OnDestroy {
   private resolveViewFromRoute(): void {
     const params = this.route.snapshot.queryParams;
     const id = Number(params['id']);
-    if (id > 0) {
+    const editId = Number(params['edit']);
+    if (editId > 0) {
+      this.persistActiveDraft();
+      this.openEditById(editId);
+    } else if (id > 0) {
       this.persistActiveDraft();
       this.openViewById(id);
     } else if (params['view'] === 'list') {
@@ -712,7 +755,6 @@ export class PurchasesComponent implements OnInit, OnDestroy {
               a.productName.localeCompare(b.productName)
             );
           }
-          this.message = `Product "${p.productName}" added to system.`;
           this.addProductFromPicker(product);
         },
         error: err => {
@@ -1139,6 +1181,10 @@ export class PurchasesComponent implements OnInit, OnDestroy {
   showList(): void {
     this.viewId = null;
     this.viewDetail = null;
+    this.editingPurchaseId = null;
+    this.editingPurchaseNumber = '';
+    this.editingSupplierInvoiceNo = null;
+    this.editingHadAttachment = false;
     this.showForm = false;
     this.clearDocumentSelection();
     this.clearViewDocument();
@@ -1158,6 +1204,10 @@ export class PurchasesComponent implements OnInit, OnDestroy {
   private resetCreateForm(successMessage = ''): void {
     this.viewId = null;
     this.viewDetail = null;
+    this.editingPurchaseId = null;
+    this.editingPurchaseNumber = '';
+    this.editingSupplierInvoiceNo = null;
+    this.editingHadAttachment = false;
     this.clearDocumentSelection();
     this.clearViewDocument();
     this.showForm = true;
@@ -1202,6 +1252,10 @@ export class PurchasesComponent implements OnInit, OnDestroy {
   private applyDraft(draft: TxnHoldDraft<PurchaseHoldFormValue>): void {
     this.viewId = null;
     this.viewDetail = null;
+    this.editingPurchaseId = null;
+    this.editingPurchaseNumber = '';
+    this.editingSupplierInvoiceNo = null;
+    this.editingHadAttachment = false;
     this.showForm = true;
     this.showSaveConfirm = false;
     this.activeLineIndex = null;
@@ -1228,9 +1282,22 @@ export class PurchasesComponent implements OnInit, OnDestroy {
     });
     this.lines.clear();
     for (const line of fv.lines ?? []) {
+      const productId = line.productId != null ? Number(line.productId) : null;
+      if (productId && productId > 0) {
+        const existing = this.productCache.get(productId) ?? this.products.find(x => x.productId === productId);
+        this.productCache.set(productId, {
+          productId,
+          productName: line.productName || existing?.productName || '',
+          sku: line.sku || existing?.sku || '',
+          purchaseCost: Number(line.unitCost) || existing?.purchaseCost || 0,
+          currentStock: line.currentStock ?? existing?.currentStock ?? 0,
+          shortKey: line.shortKey ?? existing?.shortKey,
+          serialNo: line.serialNo ?? existing?.serialNo
+        });
+      }
       this.lines.push(
         this.fb.group({
-          productId: [line.productId ?? null],
+          productId: [productId],
           quantity: [Number(line.quantity) || 1, [Validators.min(0.0001)]],
           unitCost: [Number(line.unitCost) || 0, [Validators.min(0)]]
         })
@@ -1239,11 +1306,178 @@ export class PurchasesComponent implements OnInit, OnDestroy {
     this.ensureTrailingEmptyLine();
     this.syncPaymentsFromMode();
     if (!this.taxManuallyEdited) this.syncAutoTax();
+    this.hydrateDraftLineProducts();
     setTimeout(() => this.focusSupplierField(), 0);
+  }
+
+  /** Reload name/stock for draft lines after Alt+P or page resume. */
+  private hydrateDraftLineProducts(): void {
+    const ids = [
+      ...new Set(
+        this.filledLineIndices
+          .map(i => Number(this.lines.at(i).get('productId')?.value))
+          .filter(id => id > 0)
+      )
+    ];
+    if (!ids.length) return;
+
+    forkJoin(
+      ids.map(id =>
+        this.api.get<Record<string, unknown>>(`/products/${id}`).pipe(
+          map(res => this.mapProduct((res.data ?? {}) as Record<string, unknown>)),
+          catchError(() => of(null))
+        )
+      )
+    )
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: products => {
+          for (const p of products) {
+            if (!p) continue;
+            this.rememberProduct(p);
+            if (!this.products.some(x => x.productId === p.productId)) {
+              this.products = [...this.products, p];
+            } else {
+              this.products = this.products.map(x => (x.productId === p.productId ? p : x));
+            }
+          }
+          this.cdr.markForCheck();
+        }
+      });
   }
 
   openView(item: PurchaseListItem): void {
     this.router.navigate(['/transactions/purchases'], { queryParams: { id: item.purchaseId } });
+  }
+
+  openEdit(item: PurchaseListItem): void {
+    this.router.navigate(['/transactions/purchases'], { queryParams: { edit: item.purchaseId } });
+  }
+
+  openEditFromView(): void {
+    if (!this.viewId) return;
+    this.router.navigate(['/transactions/purchases'], { queryParams: { edit: this.viewId } });
+  }
+
+  private openEditById(purchaseId: number): void {
+    this.viewId = null;
+    this.viewDetail = null;
+    this.showForm = false;
+    this.editingPurchaseId = purchaseId;
+    this.editingPurchaseNumber = '';
+    this.editingSupplierInvoiceNo = null;
+    this.editingHadAttachment = false;
+    this.clearDocumentSelection();
+    this.clearViewDocument();
+    this.loadingDetail = true;
+    this.errorMessage = '';
+    this.message = '';
+
+    this.api
+      .get<Record<string, unknown>>(`/purchases/${purchaseId}`)
+      .pipe(finalize(() => (this.loadingDetail = false)))
+      .subscribe({
+        next: res => {
+          const purchase = res.data;
+          if (!purchase) {
+            this.errorMessage = 'Purchase not found.';
+            this.editingPurchaseId = null;
+            this.openList();
+            return;
+          }
+
+          const lines = (purchase['lines'] as Array<Record<string, unknown>> | undefined) ?? [];
+          const hasReturns = lines.some(l => Number(l['returnedQuantity'] ?? l['ReturnedQuantity'] ?? 0) > 0);
+          if (hasReturns) {
+            this.editingPurchaseId = null;
+            void this.dialogs.alert(
+              'This purchase has returns, so it cannot be edited. Use Purchase Return instead.',
+              { title: 'Cannot edit purchase', severity: 'warning' }
+            );
+            this.openList();
+            return;
+          }
+
+          this.showForm = true;
+          this.applyPurchaseToForm(purchase);
+        },
+        error: err => {
+          this.editingPurchaseId = null;
+          this.errorMessage = getApiErrorMessage(err, 'Could not load purchase for edit.');
+          this.openList();
+        }
+      });
+  }
+
+  private applyPurchaseToForm(purchase: Record<string, unknown>): void {
+    this.editingPurchaseId = Number(purchase['purchaseId'] ?? this.editingPurchaseId);
+    this.editingPurchaseNumber = String(purchase['purchaseNumber'] ?? '');
+    const inv = purchase['supplierInvoiceNo'];
+    this.editingSupplierInvoiceNo = inv != null && String(inv).trim() ? String(inv).trim() : null;
+    this.editingHadAttachment = !!purchase['hasAttachmentDocument'];
+    this.showAdvanced = false;
+    this.showSaveConfirm = false;
+    this.activeLineIndex = null;
+    this.productSearch = '';
+    this.productPickerOpen = false;
+    this.taxManuallyEdited = Number(purchase['taxAmount'] ?? 0) > 0;
+    this.pendingSupplierName = null;
+    this.clearDocumentSelection();
+
+    const dateRaw = String(purchase['invoiceDate'] ?? '');
+    const invoiceDate = dateRaw.includes('T') ? dateRaw.slice(0, 10) : dateRaw.slice(0, 10) || todayIsoDate();
+
+    this.form.reset({
+      supplierId: Number(purchase['supplierId'] ?? null),
+      invoiceDate,
+      locationId: Number(purchase['locationId'] ?? null),
+      discountAmount: Number(purchase['discountAmount'] ?? 0),
+      taxAmount: Number(purchase['taxAmount'] ?? 0),
+      additionalCharges: Number(purchase['additionalCharges'] ?? 0),
+      remarks: String(purchase['remarks'] ?? '')
+    });
+
+    const lines = (purchase['lines'] as Array<Record<string, unknown>> | undefined) ?? [];
+    const payments = (purchase['payments'] as Array<Record<string, unknown>> | undefined) ?? [];
+
+    this.lines.clear();
+    for (const l of lines) {
+      const productId = Number(l['productId'] ?? l['ProductId'] ?? 0);
+      const productName = String(l['productName'] ?? l['ProductName'] ?? '');
+      const sku = String(l['sku'] ?? l['Sku'] ?? '');
+      const qty = Number(l['quantity'] ?? l['Quantity'] ?? 0);
+      const unitCost = Number(l['unitCost'] ?? l['UnitCost'] ?? 0);
+      if (productId > 0) {
+        const existing = this.productCache.get(productId) ?? this.products.find(x => x.productId === productId);
+        this.productCache.set(productId, {
+          productId,
+          productName: productName || existing?.productName || '',
+          sku: sku || existing?.sku || '',
+          purchaseCost: unitCost,
+          currentStock: existing?.currentStock ?? 0,
+          shortKey: existing?.shortKey,
+          serialNo: existing?.serialNo
+        });
+      }
+      this.lines.push(
+        this.fb.group({
+          productId: [productId || null],
+          quantity: [qty || 1, [Validators.min(0.0001)]],
+          unitCost: [unitCost, [Validators.min(0)]]
+        })
+      );
+    }
+    this.lines.push(this.createLine());
+
+    const paid = Number(purchase['paidAmount'] ?? 0);
+    const balance = Number(purchase['balanceAmount'] ?? 0);
+    if (paid <= 0) this.paymentMode = 'credit';
+    else if (balance > 0.009) this.paymentMode = 'partial';
+    else this.paymentMode = 'cash';
+    this.partialPayAmount = paid;
+
+    this.syncPaymentsFromMode();
+    setTimeout(() => this.focusSupplierField(), 0);
   }
 
   closeView(): void {
@@ -1255,12 +1489,23 @@ export class PurchasesComponent implements OnInit, OnDestroy {
   }
 
   cancel(): void {
+    if (this.editingPurchaseId) {
+      // Do not pause an edit as a new-purchase draft.
+      this.showForm = false;
+      this.editingPurchaseId = null;
+      this.editingPurchaseNumber = '';
+      this.editingSupplierInvoiceNo = null;
+      this.editingHadAttachment = false;
+      this.clearDocumentSelection();
+      this.openList();
+      return;
+    }
     this.persistActiveDraft();
     this.openList();
   }
 
   async clearAll(): Promise<void> {
-    if (this.saving) return;
+    if (this.saving || this.showSaveConfirm) return;
     if (
       this.filledLineIndices.length > 0 ||
       this.hasDraftContent()
@@ -1272,7 +1517,11 @@ export class PurchasesComponent implements OnInit, OnDestroy {
       }))) return;
     }
     this.txnHold.clearActiveDraft('purchase');
-    this.router.navigate(['/transactions/purchases'], { replaceUrl: true });
+    this.editingPurchaseId = null;
+    this.editingPurchaseNumber = '';
+    this.editingSupplierInvoiceNo = null;
+    this.editingHadAttachment = false;
+    await this.router.navigate(['/transactions/purchases'], { replaceUrl: true, queryParams: {} });
     this.resetCreateForm();
   }
 
@@ -1327,13 +1576,190 @@ export class PurchasesComponent implements OnInit, OnDestroy {
     this.showSaveConfirm = false;
   }
 
-  confirmSave(): void {
+  confirmSave(mode: TxnSaveConfirmMode = 'none'): void {
     if (this.saving) return;
-    this.performSave();
+    this.performSave(mode || 'none');
   }
 
   save(): void {
     this.requestSave();
+  }
+
+  shareViewDigital(): void {
+    if (!this.viewId) return;
+    this.openDigitalReceiptPreview(this.viewId);
+  }
+
+  printView(): void {
+    if (!this.viewId) return;
+    this.openDigitalReceiptPreview(this.viewId, { autoPrint: true });
+  }
+
+  private finishAfterSave(purchaseId: number, mode: TxnSaveConfirmMode, baseMessage: string): void {
+    if (!(purchaseId > 0) || mode === 'none') {
+      this.startNewFormAfterSave(baseMessage);
+      return;
+    }
+
+    if (mode === 'digital') {
+      this.startNewFormAfterSave('');
+      this.openDigitalReceiptPreview(purchaseId);
+      return;
+    }
+
+    // Print: prepare PDF preview then open browser print.
+    this.startNewFormAfterSave('');
+    this.openDigitalReceiptPreview(purchaseId, { autoPrint: true });
+  }
+
+  openDigitalReceiptPreview(purchaseId: number, options?: { autoPrint?: boolean }): void {
+    this.closePdfReceiptPreview();
+    this.pdfReceiptAutoPrint = !!options?.autoPrint;
+    this.pdfReceiptLoading = true;
+    this.showPdfReceiptPreview = true;
+
+    this.api
+      .get<Record<string, unknown>>(`/purchases/${purchaseId}`)
+      .pipe(
+        switchMap(purchaseRes => {
+          const purchase = purchaseRes.data;
+          if (!purchase) throw new Error('Purchase not found.');
+          return this.api.get<PdfCompanyInfo>('/settings/company').pipe(
+            map(companyRes => ({ purchase, company: companyRes.data ?? { companyName: 'Shop' } })),
+            switchMap(ctx =>
+              this.api.get<Array<{ settingKey: string; settingValue: string }>>('/settings/app-settings').pipe(
+                map(settingsRes => {
+                  const footer =
+                    (settingsRes.data ?? []).find(s => s.settingKey === 'InvoiceFooter')?.settingValue ??
+                    'Thank you for your business!';
+                  return { ...ctx, footer };
+                })
+              )
+            )
+          );
+        }),
+        finalize(() => (this.pdfReceiptLoading = false))
+      )
+      .subscribe({
+        next: async ({ purchase, company, footer }) => {
+          try {
+            const lines = (purchase['lines'] as Array<Record<string, unknown>> | undefined) ?? [];
+            const payments = (purchase['payments'] as Array<Record<string, unknown>> | undefined) ?? [];
+            const dateRaw = String(purchase['invoiceDate'] ?? '');
+            const invoiceDate = dateRaw ? formatAppDateTime(dateRaw) : todayIsoDate();
+            const purchaseNumber = String(purchase['purchaseNumber'] ?? purchaseId);
+
+            const blob = await this.pdfDocument.buildSaleReceiptPdf(
+              {
+                companyName: String(company.companyName || 'Shop'),
+                tradeName: company.tradeName,
+                address: company.address,
+                city: company.city,
+                phone: company.phone,
+                email: company.email,
+                currencyCode: company.currencyCode || 'PKR'
+              },
+              {
+                documentTitle: 'PURCHASE',
+                partyHeading: 'SUPPLIER',
+                rateHeader: 'UNIT COST',
+                saleNumber: purchaseNumber,
+                saleDate: invoiceDate,
+                customerName: String(purchase['supplierName'] ?? 'Supplier'),
+                paymentLabel: payments.length
+                  ? String(payments[0]['paymentMethodName'] ?? payments[0]['PaymentMethodName'] ?? '')
+                  : null,
+                subTotal: Number(purchase['subTotal'] ?? 0),
+                discountAmount: Number(purchase['discountAmount'] ?? 0),
+                taxAmount: Number(purchase['taxAmount'] ?? 0),
+                additionalCharges: Number(purchase['additionalCharges'] ?? 0),
+                grandTotal: Number(purchase['grandTotal'] ?? 0),
+                paidAmount: Number(purchase['paidAmount'] ?? 0),
+                balanceAmount: Number(purchase['balanceAmount'] ?? 0),
+                footer,
+                lines: lines.map(l => ({
+                  productName: String(l['productName'] ?? l['ProductName'] ?? 'Item'),
+                  quantity: Number(l['quantity'] ?? l['Quantity'] ?? 0),
+                  unitPrice: Number(l['unitCost'] ?? l['UnitCost'] ?? 0),
+                  lineTotal: Number(l['lineTotal'] ?? l['LineTotal'] ?? 0)
+                }))
+              }
+            );
+
+            this.pdfReceiptFilename = `Purchase-${purchaseNumber}.pdf`;
+            this.pdfReceiptShareText = `Purchase ${purchaseNumber} — Total ${Number(purchase['grandTotal'] ?? 0).toFixed(2)}`;
+            this.pdfReceiptBlob = blob;
+            this.pdfReceiptObjectUrl = URL.createObjectURL(blob);
+            this.pdfReceiptUrl = this.sanitizer.bypassSecurityTrustResourceUrl(this.pdfReceiptObjectUrl);
+
+            if (this.pdfReceiptAutoPrint) {
+              setTimeout(() => this.printPdfReceipt(), 400);
+            }
+          } catch {
+            this.showPdfReceiptPreview = false;
+            this.errorMessage = 'Could not create purchase PDF.';
+          }
+        },
+        error: err => {
+          this.showPdfReceiptPreview = false;
+          this.errorMessage = getApiErrorMessage(err, 'Could not prepare digital purchase PDF.');
+        }
+      });
+  }
+
+  closePdfReceiptPreview(): void {
+    if (this.pdfReceiptObjectUrl) {
+      URL.revokeObjectURL(this.pdfReceiptObjectUrl);
+    }
+    this.showPdfReceiptPreview = false;
+    this.pdfReceiptLoading = false;
+    this.pdfReceiptUrl = null;
+    this.pdfReceiptObjectUrl = null;
+    this.pdfReceiptBlob = null;
+    this.pdfReceiptFilename = '';
+    this.pdfReceiptShareText = '';
+    this.pdfReceiptSharing = false;
+    this.pdfReceiptAutoPrint = false;
+  }
+
+  downloadPdfReceipt(): void {
+    if (!this.pdfReceiptBlob) return;
+    this.pdfShare.downloadPdf(this.pdfReceiptBlob, this.pdfReceiptFilename || 'Purchase.pdf');
+  }
+
+  printPdfReceipt(): void {
+    if (!this.pdfReceiptObjectUrl) return;
+    const win = window.open(this.pdfReceiptObjectUrl, '_blank');
+    if (!win) {
+      this.errorMessage = 'Pop-up blocked. Allow pop-ups to print, or use Download.';
+      return;
+    }
+    setTimeout(() => {
+      try {
+        win.focus();
+        win.print();
+      } catch {
+        /* ignore */
+      }
+    }, 500);
+  }
+
+  async sharePdfReceipt(): Promise<void> {
+    if (!this.pdfReceiptBlob || this.pdfReceiptSharing) return;
+    this.pdfReceiptSharing = true;
+    this.cdr.markForCheck();
+    try {
+      await this.pdfShare.sharePdf(
+        this.pdfReceiptBlob,
+        this.pdfReceiptFilename || 'Purchase.pdf',
+        this.pdfReceiptShareText || 'Purchase invoice'
+      );
+    } catch {
+      this.errorMessage = 'Could not share PDF.';
+    } finally {
+      this.pdfReceiptSharing = false;
+      this.cdr.detectChanges();
+    }
   }
 
   private validateForSave(): boolean {
@@ -1370,7 +1796,7 @@ export class PurchasesComponent implements OnInit, OnDestroy {
     return true;
   }
 
-  private performSave(): void {
+  private performSave(mode: TxnSaveConfirmMode = 'none'): void {
     if (this.saving) return;
 
     const v = this.form.getRawValue();
@@ -1387,6 +1813,7 @@ export class PurchasesComponent implements OnInit, OnDestroy {
     this.saving = true;
     this.message = '';
     this.errorMessage = '';
+    const editingId = this.editingPurchaseId;
 
     const pendingName = this.pendingSupplierName?.trim() || '';
     const resolveSupplierId$ = pendingName
@@ -1407,7 +1834,9 @@ export class PurchasesComponent implements OnInit, OnDestroy {
           }
 
           const body = {
+            purchaseId: editingId ?? 0,
             supplierId,
+            supplierInvoiceNo: editingId ? this.editingSupplierInvoiceNo : null,
             invoiceDate: v.invoiceDate,
             locationId: Number(v.locationId),
             discountAmount: Number(v.discountAmount || 0),
@@ -1415,7 +1844,8 @@ export class PurchasesComponent implements OnInit, OnDestroy {
             additionalCharges: Number(v.additionalCharges || 0),
             remarks: v.remarks || null,
             lines,
-            payments: this.buildPayments()
+            payments: this.buildPayments(),
+            keepExistingAttachment: editingId ? !this.documentFile : true
           };
 
           const formData = new FormData();
@@ -1423,19 +1853,28 @@ export class PurchasesComponent implements OnInit, OnDestroy {
           if (this.documentFile) {
             formData.append('document', this.documentFile, this.documentFile.name);
           }
+
+          if (editingId) {
+            return this.api.putForm<number>(`/purchases/${editingId}`, formData);
+          }
           return this.api.postForm<number>('/purchases', formData);
         }),
         finalize(() => (this.saving = false))
       )
       .subscribe({
-        next: () => {
+        next: res => {
           this.showSaveConfirm = false;
           this.clearDocumentSelection();
-          this.startNewFormAfterSave('Purchase saved successfully.');
+          const purchaseId = Number(res.data) || editingId || 0;
+          this.finishAfterSave(
+            purchaseId,
+            mode,
+            editingId ? 'Purchase updated successfully.' : 'Purchase saved successfully.'
+          );
         },
         error: err => {
           this.showSaveConfirm = false;
-          this.errorMessage = getApiErrorMessage(err, 'Save failed.');
+          this.errorMessage = getApiErrorMessage(err, editingId ? 'Update failed.' : 'Save failed.');
         }
       });
   }

@@ -29,8 +29,19 @@ export class UiDialogComponent implements OnDestroy {
         setTimeout(() => this.primaryButton?.nativeElement.focus());
       } else {
         document.body.classList.remove('ui-dialog-open');
-        this.previousFocus?.focus();
+        const restore = this.previousFocus;
         this.previousFocus = null;
+        // Defer restore so Enter that closed the dialog cannot activate the restored control
+        // (e.g. customer select Enter → jump to sale date).
+        setTimeout(() => {
+          if (!restore?.isConnected) return;
+          const active = document.activeElement as HTMLElement | null;
+          if (active && active !== document.body && active !== restore && active.tagName !== 'BODY') {
+            // Caller already moved focus (e.g. to customer dropdown) — keep it.
+            return;
+          }
+          restore.focus();
+        }, 0);
       }
     });
   }
@@ -39,6 +50,7 @@ export class UiDialogComponent implements OnDestroy {
   onEscape(event: Event): void {
     if (!this.currentState) return;
     event.preventDefault();
+    event.stopPropagation();
     this.dialogs.close(false);
   }
 
@@ -46,6 +58,7 @@ export class UiDialogComponent implements OnDestroy {
   onEnter(event: Event): void {
     if (!this.currentState) return;
     event.preventDefault();
+    event.stopPropagation();
     this.dialogs.close(true);
   }
 
